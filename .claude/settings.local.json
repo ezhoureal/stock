@@ -6,7 +6,10 @@
       "Bash(git commit:*)",
       "Bash(gh repo create:*)",
       "Bash(uv venv:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(uv run python:*)",
+      "Bash(uv pip install:*)",
+      "Bash(echo:*)"
     ]
   }
 }

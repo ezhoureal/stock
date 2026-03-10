@@ -1,6 +1,11 @@
 """
 Mock Broker Implementation for Testing
+
+This module provides a mock broker implementation for testing without
+a real broker connection. It implements both BrokerInterface and
+the ExecutionClient interface from common.
 """
+
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import time
@@ -27,32 +32,37 @@ class MockBroker(BrokerInterface):
         Args:
             initial_cash: Initial cash balance
         """
-        self.connected = False
+        self._connected = False
         self.cash = initial_cash
+        self.initial_cash = initial_cash
         self.positions: Dict[str, Position] = {}
         self.orders: Dict[str, Order] = {}
         self.market_prices: Dict[str, float] = {}
         self.market_data: Dict[str, Dict[str, Any]] = {}
 
+    # === Connection Management ===
+
     def connect(self) -> bool:
         """Connect to the mock broker"""
-        self.connected = True
+        self._connected = True
         print(f"[MockBroker] Connected (Initial Cash: ¥{self.cash:,.2f})")
         return True
 
     def disconnect(self) -> bool:
         """Disconnect from the mock broker"""
-        self.connected = False
+        self._connected = False
         print("[MockBroker] Disconnected")
         return True
 
     def is_connected(self) -> bool:
         """Check if connected"""
-        return self.connected
+        return self._connected
+
+    # === Order Management ===
 
     def place_order(self, order: Order) -> Order:
         """Place an order"""
-        if not self.connected:
+        if not self._connected:
             raise RuntimeError("Not connected to broker")
 
         # Generate order ID
@@ -133,6 +143,8 @@ class MockBroker(BrokerInterface):
                     avg_cost=execution_price,
                     current_price=execution_price,
                     market_value=execution_price * order.quantity,
+                    entry_time=datetime.now(),
+                    source_signal=order.source_signal,
                 )
                 self.positions[order.symbol] = position
             else:
@@ -150,7 +162,7 @@ class MockBroker(BrokerInterface):
 
     def cancel_order(self, order_id: str) -> bool:
         """Cancel an order"""
-        if not self.connected:
+        if not self._connected:
             raise RuntimeError("Not connected to broker")
 
         order = self.orders.get(order_id)
@@ -177,6 +189,8 @@ class MockBroker(BrokerInterface):
             orders = [o for o in orders if o.symbol == symbol]
         return orders
 
+    # === Position Management ===
+
     def get_positions(self) -> List[Position]:
         """Get current positions"""
         return list(self.positions.values())
@@ -185,8 +199,19 @@ class MockBroker(BrokerInterface):
         """Get position for a specific symbol"""
         return self.positions.get(symbol)
 
-    def get_account_balance(self) -> AccountBalance:
-        """Get account balance information"""
+    # === Account Information ===
+
+    def get_account_balance(self) -> float:
+        """Get available cash balance"""
+        return self.cash
+
+    def get_total_equity(self) -> float:
+        """Get total equity (cash + positions market value)"""
+        total_market_value = sum(p.market_value for p in self.positions.values())
+        return self.cash + total_market_value
+
+    def get_full_account_balance(self) -> AccountBalance:
+        """Get full account balance information"""
         total_market_value = sum(p.market_value for p in self.positions.values())
         total_equity = self.cash + total_market_value
 
@@ -198,6 +223,8 @@ class MockBroker(BrokerInterface):
             available_withdrawal=self.cash,
             market_value=total_market_value,
         )
+
+    # === Market Data ===
 
     def subscribe_market_data(self, symbols: List[str]) -> bool:
         """Subscribe to market data"""
@@ -227,6 +254,8 @@ class MockBroker(BrokerInterface):
             self.subscribe_market_data([symbol])
 
         return self.market_data.get(symbol, {})
+
+    # === Testing Helpers ===
 
     def get_market_price(self, symbol: str) -> Optional[float]:
         """
@@ -270,3 +299,12 @@ class MockBroker(BrokerInterface):
         # Update timestamps in market data
         for symbol, data in self.market_data.items():
             data['timestamp'] = datetime.now()
+
+    def reset(self) -> None:
+        """Reset broker to initial state"""
+        self.cash = self.initial_cash
+        self.positions.clear()
+        self.orders.clear()
+        self.market_prices.clear()
+        self.market_data.clear()
+        print(f"[MockBroker] Reset to initial state (Cash: ¥{self.cash:,.2f})")

@@ -1,11 +1,28 @@
 """
 Base Broker Interface - Abstract base class for broker implementations
+
+This module provides the core broker abstraction that can be used by
+both real brokers (Futu, XTP, etc.) and mock implementations for testing.
+
+The BrokerInterface extends ExecutionClient from common and adds
+broker-specific functionality like market data subscriptions.
 """
+
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+import sys
+from pathlib import Path
+
+# Add common to path
+_common_path = Path(__file__).parent.parent.parent / "common"
+if str(_common_path) not in sys.path:
+    sys.path.insert(0, str(_common_path))
+
+from common.interfaces import ExecutionClient
+from common.types import Position as CommonPosition, Order as CommonOrder
 
 
 class OrderType(Enum):
@@ -36,7 +53,7 @@ class OrderStatus(Enum):
 
 @dataclass
 class Order:
-    """Order data model"""
+    """Order data model with full state tracking"""
     symbol: str
     side: OrderSide
     order_type: OrderType
@@ -52,6 +69,7 @@ class Order:
     updated_at: datetime = field(default_factory=datetime.now)
     filled_at: Optional[datetime] = None
     cancelled_at: Optional[datetime] = None
+    source_signal: Optional[str] = None  # Track which signal generated this order
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -99,10 +117,45 @@ class Order:
 
         self.updated_at = datetime.now()
 
+    def to_common_order(self) -> CommonOrder:
+        """Convert to common Order type for interoperability"""
+        return CommonOrder(
+            order_id=self.order_id or "",
+            symbol=self.symbol,
+            side=self.side.value.upper(),
+            quantity=self.quantity,
+            order_type=self.order_type.value.upper(),
+            limit_price=self.price,
+            stop_price=self.stop_price,
+            status=self.status.value.upper(),
+            filled_quantity=self.filled_quantity,
+            avg_fill_price=self.avg_fill_price,
+            timestamp=self.created_at,
+            source_signal=self.source_signal,
+            metadata=self.metadata,
+        )
+
+    @classmethod
+    def from_common_order(cls, order: CommonOrder) -> "Order":
+        """Create from common Order type"""
+        return cls(
+            symbol=order.symbol,
+            side=OrderSide.BUY if order.side.upper() == "BUY" else OrderSide.SELL,
+            order_type=OrderType.MARKET if order.order_type.upper() == "MARKET" else OrderType.LIMIT,
+            quantity=int(order.quantity),
+            price=order.limit_price,
+            stop_price=order.stop_price,
+            order_id=order.order_id,
+            filled_quantity=int(order.filled_quantity),
+            avg_fill_price=order.avg_fill_price,
+            source_signal=order.source_signal,
+            metadata=order.metadata,
+        )
+
 
 @dataclass
 class Position:
-    """Position data model"""
+    """Position data model with P&L tracking"""
     symbol: str
     quantity: int
     avg_cost: float
@@ -110,6 +163,10 @@ class Position:
     market_value: float
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
+    entry_time: Optional[datetime] = None
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    source_signal: Optional[str] = None
     last_update: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -128,6 +185,14 @@ class Position:
         """Check if position is flat (no position)"""
         return self.quantity == 0
 
+    @property
+    def return_pct(self) -> float:
+        """Calculate return percentage"""
+        if self.quantity > 0:
+            return (self.current_price - self.avg_cost) / self.avg_cost
+        else:
+            return (self.avg_cost - self.current_price) / self.avg_cost
+
     def update_price(self, new_price: float) -> None:
         """Update current price and recalculate unrealized P&L"""
         self.current_price = new_price
@@ -139,11 +204,19 @@ class Position:
         """
         Add a fill to the position and return realized P&L
 
+        Args:
+            quantity: Quantity (positive for buy, negative for sell)
+            price: Fill price
+
         Returns:
             float: Realized P&L from this fill
         """
         old_quantity = self.quantity
         old_avg_cost = self.avg_cost
+
+        # Set entry time if this is a new position
+        if self.entry_time is None:
+            self.entry_time = datetime.now()
 
         # Calculate new average cost
         if old_quantity >= 0:
@@ -193,6 +266,22 @@ class Position:
 
         return realized_pnl
 
+    def to_common_position(self) -> CommonPosition:
+        """Convert to common Position type for interoperability"""
+        return CommonPosition(
+            symbol=self.symbol,
+            side="long" if self.quantity > 0 else "short",
+            quantity=float(self.quantity),
+            entry_price=self.avg_cost,
+            entry_time=self.entry_time or datetime.now(),
+            current_price=self.current_price,
+            stop_loss=self.stop_loss,
+            take_profit=self.take_profit,
+            unrealized_pnl=self.unrealized_pnl,
+            realized_pnl=self.realized_pnl,
+            source_signal=self.source_signal,
+        )
+
 
 @dataclass
 class AccountBalance:
@@ -206,75 +295,33 @@ class AccountBalance:
     last_update: datetime = field(default_factory=datetime.now)
 
 
-class BrokerInterface(ABC):
-    """Abstract base class for broker implementations"""
+class BrokerInterface(ExecutionClient):
+    """
+    Abstract base class for broker implementations.
 
-    @abstractmethod
-    def connect(self) -> bool:
-        """
-        Connect to the broker
+    This extends ExecutionClient from common module and adds
+    broker-specific functionality like market data subscriptions.
 
-        Returns:
-            bool: True if connection successful
-        """
-        pass
+    Subclasses must implement:
+    - place_order() - Core order placement
+    - get_orders() - Get all orders
+    - subscribe_market_data() - Market data subscription
+    - unsubscribe_market_data() - Market data unsubscription
+    - get_market_data() - Get market data
+    """
 
-    @abstractmethod
-    def disconnect(self) -> bool:
-        """
-        Disconnect from the broker
-
-        Returns:
-            bool: True if disconnection successful
-        """
-        pass
-
-    @abstractmethod
-    def is_connected(self) -> bool:
-        """
-        Check if connected to broker
-
-        Returns:
-            bool: True if connected
-        """
-        pass
+    # === Abstract methods that must be implemented by subclasses ===
 
     @abstractmethod
     def place_order(self, order: Order) -> Order:
         """
-        Place an order
+        Place an order (broker-specific implementation)
 
         Args:
             order: Order to place
 
         Returns:
             Order: Updated order with order_id assigned
-        """
-        pass
-
-    @abstractmethod
-    def cancel_order(self, order_id: str) -> bool:
-        """
-        Cancel an order
-
-        Args:
-            order_id: Order ID to cancel
-
-        Returns:
-            bool: True if cancellation successful
-        """
-        pass
-
-    @abstractmethod
-    def get_order(self, order_id: str) -> Order:
-        """
-        Get order status
-
-        Args:
-            order_id: Order ID to retrieve
-
-        Returns:
-            Order: Current order status
         """
         pass
 
@@ -288,39 +335,6 @@ class BrokerInterface(ABC):
 
         Returns:
             List[Order]: List of orders
-        """
-        pass
-
-    @abstractmethod
-    def get_positions(self) -> List[Position]:
-        """
-        Get current positions
-
-        Returns:
-            List[Position]: List of current positions
-        """
-        pass
-
-    @abstractmethod
-    def get_position(self, symbol: str) -> Optional[Position]:
-        """
-        Get position for a specific symbol
-
-        Args:
-            symbol: Symbol to retrieve
-
-        Returns:
-            Optional[Position]: Position if exists, None otherwise
-        """
-        pass
-
-    @abstractmethod
-    def get_account_balance(self) -> AccountBalance:
-        """
-        Get account balance information
-
-        Returns:
-            AccountBalance: Account balance details
         """
         pass
 
@@ -362,3 +376,73 @@ class BrokerInterface(ABC):
             Dict[str, Any]: Market data including price, bid, ask, volume, etc.
         """
         pass
+
+    # === ExecutionClient interface implementation ===
+
+    def submit_order(self, order: CommonOrder) -> CommonOrder:
+        """
+        Implementation of ExecutionClient.submit_order
+
+        Converts common Order to broker Order, places it, and converts back.
+        """
+        broker_order = Order.from_common_order(order)
+        result = self.place_order(broker_order)
+        return result.to_common_order()
+
+    @abstractmethod
+    def get_order(self, order_id: str) -> Order:
+        """
+        Get order status
+
+        Args:
+            order_id: Order ID to retrieve
+
+        Returns:
+            Order: Current order status
+        """
+        pass
+
+    @abstractmethod
+    def get_positions(self) -> List[Position]:
+        """
+        Get current positions
+
+        Returns:
+            List[Position]: List of current positions
+        """
+        pass
+
+    @abstractmethod
+    def get_position(self, symbol: str) -> Optional[Position]:
+        """
+        Get position for a specific symbol
+
+        Args:
+            symbol: Symbol to retrieve
+
+        Returns:
+            Optional[Position]: Position if exists, None otherwise
+        """
+        pass
+
+    @abstractmethod
+    def get_account_balance(self) -> float:
+        """
+        Get available account balance
+
+        Returns:
+            float: Available cash balance
+        """
+        pass
+
+    def get_total_equity(self) -> float:
+        """
+        Get total account equity
+
+        Returns:
+            float: Total equity (cash + positions)
+        """
+        balance = self.get_account_balance()
+        positions = self.get_positions()
+        positions_value = sum(p.market_value for p in positions)
+        return balance + positions_value
