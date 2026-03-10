@@ -1,0 +1,21 @@
+{
+  "database": {
+    "path": "/home/zireael/trade/stocks/data/stocks.duckdb",
+    "export_dir": "/home/zireael/trade/stocks/data/exports"
+  },
+  "data_collection": {
+    "primary_source": "akshare",
+    "secondary_source": "baostock",
+    "historical_years": 1,
+    "csi300_index": "000300"
+  },
+  "logging": {
+    "log_dir": "/home/zireael/trade/stocks/data/logs",
+    "log_level": "INFO"
+  },
+  "sentiment": {
+    "enabled": false,
+    "news_sources": ["sina", "eastmoney"],
+    "update_frequency": "daily"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "system": {
+    "n_stocks": 500,
+    "max_portfolio_exposure": 1.0,
+    "max_position_size": 0.05,
+    "use_triton": false,
+    "triton_url": "localhost:8001"
+  },
+  "kalman_filter": {
+    "process_noise": 1e-5,
+    "measurement_noise": 1e-3,
+    "use_ensemble": false,
+    "n_filters": 5,
+    "adaptive_noise": true
+  },
+  "z_scoring": {
+    "method": "rolling",
+    "lookback": 20,
+    "decay": 0.94,
+    "use_cross_sectional": true,
+    "winsorize": true,
+    "winsorize_pct": 0.01,
+    "min_obs": 5
+  },
+  "echo_chamber": {
+    "method": "projection",
+    "n_factors": 3,
+    "use_market_sentiment": true,
+    "use_sector_factors": true,
+    "tolerance": 1e-6
+  },
+  "signal_generation": {
+    "entry": {
+      "long_sentiment_threshold": 1.5,
+      "long_price_threshold": -0.5,
+      "long_dislocation_threshold": 2.0,
+      "short_sentiment_threshold": -1.5,
+      "short_price_threshold": 0.5,
+      "short_dislocation_threshold": -2.0
+    },
+    "exit": {
+      "z_cross": true,
+      "time_stop_hours": 48,
+      "stop_loss_pct": 0.15,
+      "take_profit_pct": 0.20
+    },
+    "position_sizing": {
+      "method": "signal_strength",
+      "volatility_adjustment": true
+    },
+    "risk_management": {
+      "max_long_short_ratio": 2.0,
+      "max_sector_exposure": 0.20
+    }
+  },
+  "sentiment_extraction": {
+    "model_name": "ProsusAI/finbert",
+    "max_length": 512,
+    "batch_size": 64,
+    "use_fp16": true,
+    "use_int8": false
+  },
+  "triton": {
+    "model_name": "distil_finbert",
+    "model_version": "1",
+    "max_batch_size": 512,
+    "preferred_batch_size": [64, 128, 256],
+    "max_queue_delay_microseconds": 1000,
+    "instance_group": {
+      "count": 1,
+      "kind": "GPU"
+    },
+    "dynamic_batching": true
+  },
+  "performance": {
+    "enable_gpu": true,
+    "use_cuda_graphs": false,
+    "pin_memory": true
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "sentiment": {
+    "weights": {
+      "news": 0.40,
+      "social": 0.35,
+      "search": 0.15,
+      "forum": 0.10
+    },
+    "ema_alpha": 0.2,
+    "roc_threshold": 1.0,
+    "min_score": -5.0,
+    "max_score": 5.0,
+    "extreme_bearish": -3.0,
+    "bearish": -1.5,
+    "bullish": 1.5,
+    "extreme_bullish": 3.0
+  },
+  "valuation": {
+    "weights": {
+      "PE": 0.40,
+      "PB": 0.25,
+      "dividend": 0.15,
+      "PEG": 0.20
+    },
+    "deeply_undervalued": 0.30,
+    "undervalued": 0.10,
+    "overvalued": -0.10,
+    "deeply_overvalued": -0.30
+  },
+  "signal": {
+    "sentiment_threshold": 1.5,
+    "roc_threshold": 1.0,
+    "min_deviation_std": 1.5,
+    "undervalued_threshold": 0.10,
+    "overvalued_threshold": -0.10,
+    "confirmation_periods": 2,
+    "stop_loss_pct": 0.08,
+    "take_profit_pct": 0.15,
+    "sentiment_reversal_threshold": 1.0,
+    "valuation_reversal_threshold": 0.05,
+    "base_position_size": 0.01,
+    "max_position_size": 0.05,
+    "sentiment_weight": 0.5,
+    "valuation_weight": 0.5
+  },
+  "risk": {
+    "max_long_exposure": 0.30,
+    "max_short_exposure": 0.30,
+    "max_sector_exposure": 0.25,
+    "min_daily_turnover_million": 50
+  }
+}

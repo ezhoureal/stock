@@ -1,0 +1,19 @@
+# Broker Integration System Requirements
+
+# Futu API (for live trading)
+# pip install futu-api
+# Note: Requires OpenD gateway to be installed and running
+# Download from: https://www.futunn.com/en/download/openAPI
+
+# Core dependencies
+pandas>=2.0.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+
+# Development dependencies
+pytest>=7.0.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Optional: For testing
+# pytest-asyncio>=0.21.0
