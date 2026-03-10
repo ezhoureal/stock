@@ -10,51 +10,69 @@ A Chinese stock trading system with multiple strategies and live trading infrast
 
 ### Setup and Installation
 
-Each module has its own `requirements.txt`:
+Uses uv for dependency management with optional dependency groups:
 
 ```bash
-# Data pipeline
-pip install -r data/requirements.txt
+# Install uv if not already installed
+curl -LsSf https://docs.astral.sh/uv | sh
 
-# Sentiment arbitrage (requires CUDA GPU)
-pip install -r sentiment_arbitrage/requirements.txt
+# Create virtual environment and install dependencies
+uv venv
 
-# Broker integration
-pip install -r live/broker/requirements.txt
+# Install with specific dependency groups
+uv pip install -e ".[data,sentiment,broker,dev]"  # All optional deps
+uv pip install -e ".[data]"                    # Data pipeline only
+uv pip install -e ".[sentiment]"                # Sentiment arbitrage only
+uv pip install -e ".[broker]"                 # Broker integration only
+uv pip install -e ".[dev]"                   # Development tools only
+
+# Install everything (core + all optional)
+uv pip install -e ".[all]"
 ```
 
 ### Running the System
 
+All commands should be run from the project root:
+
 **Sentiment Arbitrage System:**
 ```bash
-cd sentiment_arbitrage
-python main.py                                    # Run demo with synthetic data
-python main.py --config configs/default_config.json  # Custom config
-python tests/test_framework.py                    # Run tests
+uv run python sentiment_arbitrage/main.py                              # Run demo with synthetic data
+uv run python sentiment_arbitrage/tests/test_framework.py  # Run tests
 ```
 
 **Strategy Module (Contrarian Trading):**
 ```bash
-cd strategy
-python valuation.py      # Test valuation calculator
-python sentiment.py      # Test sentiment analyzer
-python signals.py        # Test signal generator
+uv run python strategy/valuation.py    # Test valuation calculator
+uv run python strategy/sentiment.py      # Test sentiment analyzer
+uv run python strategy/signals.py        # Test signal generator
 ```
 
 **Data Pipeline:**
 ```bash
-cd data
-python init_db.py                       # Initialize DuckDB database
-python collect_csi300.py                # Fetch CSI 300 constituents
-python collect_historical_prices.py     # Collect price data
-python collect_historical_prices.py --years 3  # Extended history
+uv run python data/init_db.py                       # Initialize DuckDB database
+uv run python data/collect_csi300.py                # Fetch CSI 300 constituents
+uv run python data/collect_historical_prices.py     # Collect price data
+uv run python data/collect_historical_prices.py -- --years 3  # Extended history
 ```
 
 **Broker/Live Trading:**
 ```bash
-cd live/broker/python
-python main.py --paper-trading          # Paper trading mode
-python test_simple.py                   # Mock broker test
+uv run python live/broker/python/main.py --paper-trading  # Paper trading mode
+uv run python live/broker/python/test_simple.py           # Mock broker test
+```
+
+### Development
+
+```bash
+# Run tests
+uv run pytest
+
+# Format code
+uv run ruff check .
+uv run ruff format .
+
+# Lint code
+uv run flake8 .
 ```
 
 ## Architecture
