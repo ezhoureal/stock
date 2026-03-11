@@ -74,13 +74,6 @@ Combines sentiment and valuation to generate trading signals.
 
 ## Quick Start
 
-### Installation
-
-```bash
-cd ~/trade/stocks/strategy
-pip install -r requirements.txt  # pandas, numpy, scipy, scikit-learn
-```
-
 ### Basic Usage
 
 ```python
