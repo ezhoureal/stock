@@ -29,3 +29,6 @@ backtest_results/
 
 backtest_results/
 
+
+# Log files
+*.log
