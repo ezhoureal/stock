@@ -9,22 +9,20 @@ Usage:
     python validate_db.py --table daily_prices
 """
 
-import sys
-import os
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple, Optional
+import sys
 import traceback
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler('/home/zireael/trade/stocks/data/logs/db_validation.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.FileHandler("/home/zireael/trade/stocks/data/logs/db_validation.log"),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -65,14 +63,14 @@ class DatabaseValidator:
             config_path: Path to configuration file
         """
         self.config = self._load_config(config_path)
-        self.db_path = self.config['database']['path']
+        self.db_path = self.config["database"]["path"]
         self.conn = None
         self.logger = logger
 
-    def _load_config(self, config_path: str) -> Dict:
+    def _load_config(self, config_path: str) -> dict:
         """Load configuration from JSON file"""
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 return json.load(f)
         except Exception as e:
             self.logger.error(f"Failed to load config: {e}")
@@ -82,6 +80,7 @@ class DatabaseValidator:
         """Connect to DuckDB database"""
         try:
             import duckdb
+
             self.conn = duckdb.connect(self.db_path)
             return True
         except Exception as e:
@@ -101,8 +100,12 @@ class DatabaseValidator:
         try:
             # Check if required tables exist
             required_tables = [
-                'stocks', 'daily_prices', 'fundamentals',
-                'sentiment_scores', 'news_raw', 'csi300_history'
+                "stocks",
+                "daily_prices",
+                "fundamentals",
+                "sentiment_scores",
+                "news_raw",
+                "csi300_history",
             ]
 
             for table in required_tables:
@@ -116,9 +119,9 @@ class DatabaseValidator:
 
             # Check critical columns in daily_prices
             critical_columns = {
-                'daily_prices': ['stock_id', 'date', 'open', 'high', 'low', 'close', 'volume'],
-                'stocks': ['stock_id', 'name', 'is_csi300'],
-                'news_raw': ['title', 'url', 'publish_time', 'source']
+                "daily_prices": ["stock_id", "date", "open", "high", "low", "close", "volume"],
+                "stocks": ["stock_id", "name", "is_csi300"],
+                "news_raw": ["title", "url", "publish_time", "source"],
             }
 
             for table, columns in critical_columns.items():
@@ -157,19 +160,23 @@ class DatabaseValidator:
             if null_check:
                 total_rows = null_check[5]
                 nulls = {
-                    'open': null_check[0],
-                    'high': null_check[1],
-                    'low': null_check[2],
-                    'close': null_check[3],
-                    'volume': null_check[4]
+                    "open": null_check[0],
+                    "high": null_check[1],
+                    "low": null_check[2],
+                    "close": null_check[3],
+                    "volume": null_check[4],
                 }
 
                 for col, null_count in nulls.items():
                     if null_count > 0:
                         null_pct = (null_count / total_rows) * 100
-                        result.add_issue(f"Column {col}: {null_count} NULL values ({null_pct:.2f}%)")
+                        result.add_issue(
+                            f"Column {col}: {null_count} NULL values ({null_pct:.2f}%)"
+                        )
                         if null_pct > 5:
-                            result.add_suggestion(f"Consider cleaning or filling NULL values in {col}")
+                            result.add_suggestion(
+                                f"Consider cleaning or filling NULL values in {col}"
+                            )
 
             # Check for price anomalies (high < low, prices <= 0)
             anomalies = self.conn.execute("""
@@ -186,9 +193,9 @@ class DatabaseValidator:
                 result.add_issue(f"{anomalies[0]} rows where high < low (impossible)")
                 result.add_suggestion("Remove or correct these rows")
 
-            for i, col in enumerate(['open', 'high', 'low', 'close']):
-                if anomalies[i+1] > 0:
-                    result.add_issue(f"{anomalies[i+1]} rows with non-positive {col}")
+            for i, col in enumerate(["open", "high", "low", "close"]):
+                if anomalies[i + 1] > 0:
+                    result.add_issue(f"{anomalies[i + 1]} rows with non-positive {col}")
 
             # Check for extreme outliers (price changes > 50% in one day)
             outliers = self.conn.execute("""
@@ -204,7 +211,9 @@ class DatabaseValidator:
             """).fetchone()
 
             if outliers and outliers[0] > 0:
-                result.add_suggestion(f"Found {outliers[0]} extreme price moves (>50%), review for data errors")
+                result.add_suggestion(
+                    f"Found {outliers[0]} extreme price moves (>50%), review for data errors"
+                )
 
             # Check data coverage by date
             coverage = self.conn.execute("""
@@ -217,7 +226,7 @@ class DatabaseValidator:
             """).fetchone()
 
             if coverage:
-                self.logger.info(f"Price data coverage:")
+                self.logger.info("Price data coverage:")
                 self.logger.info(f"  Date range: {coverage[0]} to {coverage[1]}")
                 self.logger.info(f"  Trading days: {coverage[2]}")
                 self.logger.info(f"  Stocks with data: {coverage[3]}")
@@ -356,7 +365,7 @@ class DatabaseValidator:
             self.logger.info(f"Fundamental records: {fund_count}")
 
             # Check for critical columns
-            critical_metrics = ['pe_ratio', 'pb_ratio', 'roe']
+            critical_metrics = ["pe_ratio", "pb_ratio", "roe"]
             for metric in critical_metrics:
                 null_count = self.conn.execute(f"""
                     SELECT COUNT(*) FROM fundamentals WHERE {metric} IS NULL
@@ -377,14 +386,16 @@ class DatabaseValidator:
                 self.logger.info(f"Latest fundamental data: {latest_fund[0]} ({days_old} days old)")
 
                 if days_old > 120:
-                    result.add_suggestion(f"Fundamental data is {days_old} days old, consider updating")
+                    result.add_suggestion(
+                        f"Fundamental data is {days_old} days old, consider updating"
+                    )
 
         except Exception as e:
             result.add_issue(f"Fundamental data validation error: {e}")
 
         return result
 
-    def fix_issues(self, results: List[ValidationResult], auto_fix: bool = False):
+    def fix_issues(self, results: list[ValidationResult], auto_fix: bool = False):
         """
         Attempt to fix identified issues.
 
@@ -417,7 +428,7 @@ class DatabaseValidator:
         except Exception as e:
             self.logger.error(f"Auto-fix failed: {e}")
 
-    def run_validation(self, table: Optional[str] = None, fix: bool = False) -> List[ValidationResult]:
+    def run_validation(self, table: str | None = None, fix: bool = False) -> list[ValidationResult]:
         """
         Run all or specific validations.
 
@@ -441,19 +452,19 @@ class DatabaseValidator:
 
         try:
             # Run validations
-            if table is None or table == 'schema':
+            if table is None or table == "schema":
                 results.append(self.validate_schema())
 
-            if table is None or table == 'stocks':
+            if table is None or table == "stocks":
                 results.append(self.validate_stock_data())
 
-            if table is None or table == 'daily_prices':
+            if table is None or table == "daily_prices":
                 results.append(self.validate_price_data())
 
-            if table is None or table == 'news_raw':
+            if table is None or table == "news_raw":
                 results.append(self.validate_news_data())
 
-            if table is None or table == 'fundamentals':
+            if table is None or table == "fundamentals":
                 results.append(self.validate_fundamental_data())
 
             # Print summary
@@ -489,20 +500,12 @@ def main():
 
     parser = argparse.ArgumentParser(description="Validate database for sentiment arbitrage system")
     parser.add_argument(
-        '--table',
-        choices=['schema', 'stocks', 'daily_prices', 'news_raw', 'fundamentals'],
-        help='Specific table to validate (default: all)'
+        "--table",
+        choices=["schema", "stocks", "daily_prices", "news_raw", "fundamentals"],
+        help="Specific table to validate (default: all)",
     )
-    parser.add_argument(
-        '--fix',
-        action='store_true',
-        help='Attempt to automatically fix issues'
-    )
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose logging'
-    )
+    parser.add_argument("--fix", action="store_true", help="Attempt to automatically fix issues")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
 

@@ -8,13 +8,13 @@ The BrokerInterface extends ExecutionClient from common and adds
 broker-specific functionality like market data subscriptions.
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+import sys
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import sys
 from pathlib import Path
+from typing import Any
 
 # Add common to path
 _common_path = Path(__file__).parent.parent.parent / "common"
@@ -22,11 +22,13 @@ if str(_common_path) not in sys.path:
     sys.path.insert(0, str(_common_path))
 
 from common.interfaces import ExecutionClient
-from common.types import Position as CommonPosition, Order as CommonOrder
+from common.types import Order as CommonOrder
+from common.types import Position as CommonPosition
 
 
 class OrderType(Enum):
     """Order types"""
+
     MARKET = "market"
     LIMIT = "limit"
     STOP = "stop"
@@ -35,12 +37,14 @@ class OrderType(Enum):
 
 class OrderSide(Enum):
     """Order sides"""
+
     BUY = "buy"
     SELL = "sell"
 
 
 class OrderStatus(Enum):
     """Order statuses"""
+
     CREATED = "created"
     VALIDATING = "validating"
     PENDING = "pending"
@@ -54,23 +58,24 @@ class OrderStatus(Enum):
 @dataclass
 class Order:
     """Order data model with full state tracking"""
+
     symbol: str
     side: OrderSide
     order_type: OrderType
     quantity: int
-    price: Optional[float] = None  # Required for limit and stop_limit orders
-    stop_price: Optional[float] = None  # Required for stop and stop_limit orders
+    price: float | None = None  # Required for limit and stop_limit orders
+    stop_price: float | None = None  # Required for stop and stop_limit orders
     status: OrderStatus = OrderStatus.CREATED
-    order_id: Optional[str] = None
+    order_id: str | None = None
     filled_quantity: int = 0
-    avg_fill_price: Optional[float] = None
-    reject_reason: Optional[str] = None
+    avg_fill_price: float | None = None
+    reject_reason: str | None = None
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    filled_at: Optional[datetime] = None
-    cancelled_at: Optional[datetime] = None
-    source_signal: Optional[str] = None  # Track which signal generated this order
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    filled_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    source_signal: str | None = None  # Track which signal generated this order
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def remaining_quantity(self) -> int:
@@ -80,8 +85,12 @@ class Order:
     @property
     def is_complete(self) -> bool:
         """Check if order is complete (filled or cancelled)"""
-        return self.status in [OrderStatus.FILLED, OrderStatus.CANCELLED,
-                               OrderStatus.REJECTED, OrderStatus.EXPIRED]
+        return self.status in [
+            OrderStatus.FILLED,
+            OrderStatus.CANCELLED,
+            OrderStatus.REJECTED,
+            OrderStatus.EXPIRED,
+        ]
 
     @property
     def is_active(self) -> bool:
@@ -106,7 +115,9 @@ class Order:
         if self.avg_fill_price is None:
             self.avg_fill_price = price
         else:
-            total_value = (self.avg_fill_price * (self.filled_quantity - quantity)) + (price * quantity)
+            total_value = (self.avg_fill_price * (self.filled_quantity - quantity)) + (
+                price * quantity
+            )
             self.avg_fill_price = total_value / self.filled_quantity
 
         # Update status
@@ -141,7 +152,9 @@ class Order:
         return cls(
             symbol=order.symbol,
             side=OrderSide.BUY if order.side.upper() == "BUY" else OrderSide.SELL,
-            order_type=OrderType.MARKET if order.order_type.upper() == "MARKET" else OrderType.LIMIT,
+            order_type=OrderType.MARKET
+            if order.order_type.upper() == "MARKET"
+            else OrderType.LIMIT,
             quantity=int(order.quantity),
             price=order.limit_price,
             stop_price=order.stop_price,
@@ -156,6 +169,7 @@ class Order:
 @dataclass
 class Position:
     """Position data model with P&L tracking"""
+
     symbol: str
     quantity: int
     avg_cost: float
@@ -163,12 +177,12 @@ class Position:
     market_value: float
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
-    entry_time: Optional[datetime] = None
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
-    source_signal: Optional[str] = None
+    entry_time: datetime | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    source_signal: str | None = None
     last_update: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_long(self) -> bool:
@@ -286,6 +300,7 @@ class Position:
 @dataclass
 class AccountBalance:
     """Account balance information"""
+
     total_equity: float
     cash: float
     buying_power: float
@@ -326,7 +341,7 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_orders(self, symbol: Optional[str] = None) -> List[Order]:
+    def get_orders(self, symbol: str | None = None) -> list[Order]:
         """
         Get all orders or orders for a specific symbol
 
@@ -339,7 +354,7 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def subscribe_market_data(self, symbols: List[str]) -> bool:
+    def subscribe_market_data(self, symbols: list[str]) -> bool:
         """
         Subscribe to market data for symbols
 
@@ -352,7 +367,7 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def unsubscribe_market_data(self, symbols: List[str]) -> bool:
+    def unsubscribe_market_data(self, symbols: list[str]) -> bool:
         """
         Unsubscribe from market data for symbols
 
@@ -365,7 +380,7 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_market_data(self, symbol: str) -> Dict[str, Any]:
+    def get_market_data(self, symbol: str) -> dict[str, Any]:
         """
         Get current market data for a symbol
 
@@ -403,7 +418,7 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_positions(self) -> List[Position]:
+    def get_positions(self) -> list[Position]:
         """
         Get current positions
 
@@ -413,7 +428,7 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_position(self, symbol: str) -> Optional[Position]:
+    def get_position(self, symbol: str) -> Position | None:
         """
         Get position for a specific symbol
 

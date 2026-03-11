@@ -7,16 +7,16 @@ Usage:
 """
 
 import json
-import sys
-from datetime import datetime
 
 # Load configuration
 CONFIG_PATH = "/home/zireael/trade/stocks/data/config.json"
 
+
 def load_config():
     """Load configuration from config.json"""
-    with open(CONFIG_PATH, 'r') as f:
+    with open(CONFIG_PATH) as f:
         return json.load(f)
+
 
 def main():
     print("=" * 80)
@@ -34,8 +34,8 @@ def main():
         return False
 
     config = load_config()
-    db_path = config['database']['path']
-    index_code = config['data_collection']['csi300_index']
+    db_path = config["database"]["path"]
+    index_code = config["data_collection"]["csi300_index"]
 
     print(f"Database path: {db_path}")
     print(f"CSI 300 Index: {index_code}")
@@ -46,6 +46,7 @@ def main():
 
     try:
         import akshare as ak
+
         print("✓ Akshare imported")
     except ImportError:
         print("✗ Akshare not installed")
@@ -75,14 +76,14 @@ def main():
 
     for _, row in df_csi300.iterrows():
         # Extract stock ID from various formats
-        stock_code = row.get('品种代码', row.get('code', ''))
-        stock_name = row.get('品种名称', row.get('name', ''))
+        stock_code = row.get("品种代码", row.get("code", ""))
+        stock_name = row.get("品种名称", row.get("name", ""))
 
         if not stock_code:
             continue
 
         # Determine code formats
-        if stock_code.startswith('6'):
+        if stock_code.startswith("6"):
             ts_code = f"{stock_code}.SH"
             akshare_code = stock_code
             baostock_code = f"sh.{stock_code}"
@@ -91,18 +92,20 @@ def main():
             akshare_code = stock_code
             baostock_code = f"sz.{stock_code}"
 
-        records.append({
-            'stock_id': stock_code,
-            'ts_code': ts_code,
-            'akshare_code': akshare_code,
-            'baostock_code': baostock_code,
-            'name': stock_name,
-            'industry': '',
-            'sector': '',
-            'list_date': None,
-            'is_csi300': True,
-            'is_active': True
-        })
+        records.append(
+            {
+                "stock_id": stock_code,
+                "ts_code": ts_code,
+                "akshare_code": akshare_code,
+                "baostock_code": baostock_code,
+                "name": stock_name,
+                "industry": "",
+                "sector": "",
+                "list_date": None,
+                "is_csi300": True,
+                "is_active": True,
+            }
+        )
 
     print(f"✓ Processed {len(records)} stocks")
 
@@ -116,16 +119,26 @@ def main():
         conn.execute("BEGIN TRANSACTION")
 
         for _, row in df_stocks.iterrows():
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO stocks
                 (stock_id, ts_code, akshare_code, baostock_code, name,
                  industry, sector, list_date, is_csi300, is_active, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """, [
-                row['stock_id'], row['ts_code'], row['akshare_code'], row['baostock_code'],
-                row['name'], row['industry'], row['sector'], row['list_date'],
-                row['is_csi300'], row['is_active']
-            ])
+            """,
+                [
+                    row["stock_id"],
+                    row["ts_code"],
+                    row["akshare_code"],
+                    row["baostock_code"],
+                    row["name"],
+                    row["industry"],
+                    row["sector"],
+                    row["list_date"],
+                    row["is_csi300"],
+                    row["is_active"],
+                ],
+            )
 
         conn.execute("COMMIT")
         print(f"✓ Inserted {len(records)} stocks into database")
@@ -160,6 +173,7 @@ def main():
 
     conn.close()
     return True
+
 
 if __name__ == "__main__":
     success = main()

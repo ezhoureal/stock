@@ -1,21 +1,23 @@
 """
 Risk Controls - Position limits, stop-loss, and risk management
 """
-import sys
+
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from typing import Optional, Dict, List
-from datetime import datetime, timedelta
 from dataclasses import dataclass
+from datetime import datetime
 
-from broker.base import Order, Position, OrderSide
-from order.models import OrderRequest, OrderValidationError, OrderErrorType
+from broker.base import Order, OrderSide, Position
+from order.models import OrderErrorType, OrderRequest, OrderValidationError
 
 
 @dataclass
 class RiskLimit:
     """Risk limit configuration"""
+
     max_position_size: int = 10000
     max_total_position_value: float = 1000000.0
     max_positions: int = 10
@@ -27,6 +29,7 @@ class RiskLimit:
 @dataclass
 class DailyLossTracker:
     """Track daily losses"""
+
     date: datetime
     start_balance: float
     current_balance: float
@@ -41,7 +44,7 @@ class DailyLossTracker:
 class RiskManager:
     """Risk manager for order validation and position monitoring"""
 
-    def __init__(self, limits: Optional[RiskLimit] = None):
+    def __init__(self, limits: RiskLimit | None = None):
         """
         Initialize risk manager
 
@@ -49,9 +52,9 @@ class RiskManager:
             limits: Risk limit configuration
         """
         self.limits = limits or RiskLimit()
-        self.daily_tracker: Optional[DailyLossTracker] = None
-        self.position_limits: Dict[str, int] = {}
-        self.stop_loss_orders: Dict[str, Order] = {}
+        self.daily_tracker: DailyLossTracker | None = None
+        self.position_limits: dict[str, int] = {}
+        self.stop_loss_orders: dict[str, Order] = {}
 
     def set_position_limit(self, symbol: str, limit: int) -> None:
         """
@@ -112,9 +115,9 @@ class RiskManager:
     def validate_order_request(
         self,
         order_request: OrderRequest,
-        current_positions: Dict[str, int],
+        current_positions: dict[str, int],
         account_balance: float,
-        market_prices: Dict[str, float]
+        market_prices: dict[str, float],
     ) -> OrderValidationError:
         """
         Validate order request against risk limits
@@ -148,7 +151,7 @@ class RiskManager:
             return OrderValidationError(
                 error_type=OrderErrorType.RISK_LIMIT_EXCEEDED,
                 message=f"Position limit exceeded: {abs(new_qty)} > {position_limit}",
-                field="quantity"
+                field="quantity",
             )
 
         # Check max positions
@@ -179,10 +182,10 @@ class RiskManager:
             )
 
         # Check total position value
-        new_total_value = sum(
-            abs(q) * market_prices.get(sym, 0)
-            for sym, q in current_positions.items()
-        ) + order_value
+        new_total_value = (
+            sum(abs(q) * market_prices.get(sym, 0) for sym, q in current_positions.items())
+            + order_value
+        )
 
         if new_total_value > self.limits.max_total_position_value:
             return OrderValidationError(
@@ -216,7 +219,7 @@ class RiskManager:
 
         return None
 
-    def check_stop_loss(self, positions: List[Position]) -> List[str]:
+    def check_stop_loss(self, positions: list[Position]) -> list[str]:
         """
         Check if any positions hit stop-loss
 
@@ -241,7 +244,7 @@ class RiskManager:
 
         return stop_loss_symbols
 
-    def should_close_positions(self, positions: List[Position]) -> bool:
+    def should_close_positions(self, positions: list[Position]) -> bool:
         """
         Check if we should close all positions due to risk limits
 
@@ -279,7 +282,7 @@ class RiskManager:
             return self.daily_tracker.daily_loss >= self.limits.max_daily_loss
         return False
 
-    def get_risk_summary(self) -> Dict[str, any]:
+    def get_risk_summary(self) -> dict[str, any]:
         """
         Get risk summary
 
@@ -287,12 +290,12 @@ class RiskManager:
             Dict with risk summary information
         """
         return {
-            'max_position_size': self.limits.max_position_size,
-            'max_total_position_value': self.limits.max_total_position_value,
-            'max_positions': self.limits.max_positions,
-            'max_daily_loss': self.limits.max_daily_loss,
-            'stop_loss_percent': self.limits.stop_loss_percent,
-            'current_daily_loss': self.get_daily_loss(),
-            'daily_limit_reached': self.is_daily_limit_reached(),
-            'custom_position_limits': len(self.position_limits),
+            "max_position_size": self.limits.max_position_size,
+            "max_total_position_value": self.limits.max_total_position_value,
+            "max_positions": self.limits.max_positions,
+            "max_daily_loss": self.limits.max_daily_loss,
+            "stop_loss_percent": self.limits.stop_loss_percent,
+            "current_daily_loss": self.get_daily_loss(),
+            "daily_limit_reached": self.is_daily_limit_reached(),
+            "custom_position_limits": len(self.position_limits),
         }

@@ -7,16 +7,16 @@ Usage:
 """
 
 import json
-import os
-from datetime import datetime
 
 # Load configuration
 CONFIG_PATH = "/home/zireael/trade/stocks/data/config.json"
 
+
 def load_config():
     """Load configuration from config.json"""
-    with open(CONFIG_PATH, 'r') as f:
+    with open(CONFIG_PATH) as f:
         return json.load(f)
+
 
 def main():
     print("=" * 80)
@@ -25,13 +25,14 @@ def main():
     print()
 
     config = load_config()
-    db_path = config['database']['path']
+    db_path = config["database"]["path"]
 
     print(f"Database path: {db_path}")
     print()
 
     try:
         import duckdb
+
         print("✓ DuckDB imported successfully")
     except ImportError:
         print("✗ DuckDB not installed. Install with:")
@@ -45,7 +46,7 @@ def main():
 
     # Define SQL schema
     schemas = {
-        'stocks': """
+        "stocks": """
             CREATE TABLE IF NOT EXISTS stocks (
                 stock_id VARCHAR(20) PRIMARY KEY,
                 ts_code VARCHAR(20),
@@ -61,8 +62,7 @@ def main():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """,
-
-        'daily_prices': """
+        "daily_prices": """
             CREATE TABLE IF NOT EXISTS daily_prices (
                 id INTEGER PRIMARY KEY,
                 stock_id VARCHAR(20),
@@ -80,8 +80,7 @@ def main():
                 UNIQUE(stock_id, trade_date, data_source)
             );
         """,
-
-        'fundamentals': """
+        "fundamentals": """
             CREATE TABLE IF NOT EXISTS fundamentals (
                 id INTEGER PRIMARY KEY,
                 stock_id VARCHAR(20),
@@ -106,8 +105,7 @@ def main():
                 UNIQUE(stock_id, report_date)
             );
         """,
-
-        'sentiment_scores': """
+        "sentiment_scores": """
             CREATE TABLE IF NOT EXISTS sentiment_scores (
                 id INTEGER PRIMARY KEY,
                 stock_id VARCHAR(20),
@@ -124,8 +122,7 @@ def main():
                 UNIQUE(stock_id, timestamp, source)
             );
         """,
-
-        'news_raw': """
+        "news_raw": """
             CREATE TABLE IF NOT EXISTS news_raw (
                 id INTEGER PRIMARY KEY,
                 stock_id VARCHAR(20),
@@ -141,8 +138,7 @@ def main():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """,
-
-        'csi300_history': """
+        "csi300_history": """
             CREATE TABLE IF NOT EXISTS csi300_history (
                 id INTEGER PRIMARY KEY,
                 stock_id VARCHAR(20),
@@ -155,18 +151,18 @@ def main():
     }
 
     indexes = {
-        'idx_stocks_csi300': "CREATE INDEX IF NOT EXISTS idx_stocks_csi300 ON stocks(is_csi300);",
-        'idx_stocks_active': "CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(is_active);",
-        'idx_daily_prices_stock_date': "CREATE INDEX IF NOT EXISTS idx_daily_prices_stock_date ON daily_prices(stock_id, trade_date);",
-        'idx_daily_prices_date': "CREATE INDEX IF NOT EXISTS idx_daily_prices_date ON daily_prices(trade_date);",
-        'idx_fundamentals_stock_date': "CREATE INDEX IF NOT EXISTS idx_fundamentals_stock_date ON fundamentals(stock_id, report_date);",
-        'idx_sentiment_stock_time': "CREATE INDEX IF NOT EXISTS idx_sentiment_stock_time ON sentiment_scores(stock_id, timestamp);",
-        'idx_sentiment_date': "CREATE INDEX IF NOT EXISTS idx_sentiment_date ON sentiment_scores(sentiment_date);",
-        'idx_news_stock': "CREATE INDEX IF NOT EXISTS idx_news_stock ON news_raw(stock_id);",
-        'idx_news_time': "CREATE INDEX IF NOT EXISTS idx_news_time ON news_raw(publish_time);",
-        'idx_news_source': "CREATE INDEX IF NOT EXISTS idx_news_source ON news_raw(source);",
-        'idx_csi300_stock': "CREATE INDEX IF NOT EXISTS idx_csi300_stock ON csi300_history(stock_id);",
-        'idx_csi300_date': "CREATE INDEX IF NOT EXISTS idx_csi300_date ON csi300_history(entry_date);",
+        "idx_stocks_csi300": "CREATE INDEX IF NOT EXISTS idx_stocks_csi300 ON stocks(is_csi300);",
+        "idx_stocks_active": "CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(is_active);",
+        "idx_daily_prices_stock_date": "CREATE INDEX IF NOT EXISTS idx_daily_prices_stock_date ON daily_prices(stock_id, trade_date);",
+        "idx_daily_prices_date": "CREATE INDEX IF NOT EXISTS idx_daily_prices_date ON daily_prices(trade_date);",
+        "idx_fundamentals_stock_date": "CREATE INDEX IF NOT EXISTS idx_fundamentals_stock_date ON fundamentals(stock_id, report_date);",
+        "idx_sentiment_stock_time": "CREATE INDEX IF NOT EXISTS idx_sentiment_stock_time ON sentiment_scores(stock_id, timestamp);",
+        "idx_sentiment_date": "CREATE INDEX IF NOT EXISTS idx_sentiment_date ON sentiment_scores(sentiment_date);",
+        "idx_news_stock": "CREATE INDEX IF NOT EXISTS idx_news_stock ON news_raw(stock_id);",
+        "idx_news_time": "CREATE INDEX IF NOT EXISTS idx_news_time ON news_raw(publish_time);",
+        "idx_news_source": "CREATE INDEX IF NOT EXISTS idx_news_source ON news_raw(source);",
+        "idx_csi300_stock": "CREATE INDEX IF NOT EXISTS idx_csi300_stock ON csi300_history(stock_id);",
+        "idx_csi300_date": "CREATE INDEX IF NOT EXISTS idx_csi300_date ON csi300_history(entry_date);",
     }
 
     # Create tables
@@ -227,6 +223,7 @@ def main():
 
     conn.close()
     return True
+
 
 if __name__ == "__main__":
     success = main()

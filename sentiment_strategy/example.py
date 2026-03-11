@@ -4,31 +4,20 @@ Example script demonstrating the full Chinese Stock Sentiment Trading System
 This example shows how to use the strategy modules together to generate trading signals.
 """
 
-import sys
 from datetime import datetime
 
+from sentiment import SentimentAnalyzer, SentimentSource
+from signals import Position, SignalGenerator
+
 # Import strategy components
-from valuation import (
-    ValuationCalculator,
-    ValuationMetrics,
-    SectorMetrics
-)
-from sentiment import (
-    SentimentAnalyzer,
-    SentimentSource
-)
-from signals import (
-    SignalGenerator,
-    TradingSignal,
-    Position
-)
+from valuation import SectorMetrics, ValuationCalculator, ValuationMetrics
 
 
 def print_section(title: str):
     """Print a formatted section header."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f" {title}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def example_buy_signal():
@@ -45,27 +34,27 @@ def example_buy_signal():
 
     # Company: Undervalued (low PE, high dividend vs sector)
     company = ValuationMetrics(
-        pe_ratio=12.0,           # Low P/E vs sector median
-        pb_ratio=1.8,            # Moderate P/B
-        dividend_yield=0.035,    # High dividend yield (3.5%)
-        peg_ratio=1.1,           # Low PEG (growth is cheap)
+        pe_ratio=12.0,  # Low P/E vs sector median
+        pb_ratio=1.8,  # Moderate P/B
+        dividend_yield=0.035,  # High dividend yield (3.5%)
+        peg_ratio=1.1,  # Low PEG (growth is cheap)
         eps=2.5,
         book_value_per_share=10.0,
-        annual_dividend=0.6
+        annual_dividend=0.6,
     )
 
     # Sector: Higher valuation
     sector = SectorMetrics(
-        pe_ratio=25.0,           # Sector P/E is higher
+        pe_ratio=25.0,  # Sector P/E is higher
         pb_ratio=2.5,
         dividend_yield=0.015,
-        peg_ratio=2.0
+        peg_ratio=2.0,
     )
 
     # Calculate valuation
     valuation = valuation_calc.calculate_valuation(company, sector)
 
-    print(f"\n--- Valuation Analysis ---")
+    print("\n--- Valuation Analysis ---")
     print(f"Company PE: {company.pe_ratio:.1f} (Sector: {sector.pe_ratio:.1f})")
     print(f"Company P/B: {company.pb_ratio:.1f} (Sector: {sector.pb_ratio:.1f})")
     print(f"Company Dividend: {company.dividend_yield:.1%} (Sector: {sector.dividend_yield:.1%})")
@@ -76,42 +65,42 @@ def example_buy_signal():
     # Sentiment: Bearish (panic selling)
     bearish_sources = [
         SentimentSource(
-            source='news',
+            source="news",
             timestamp=datetime.now(),
             raw_sentiment=-0.4,
             normalized=-0.4,
             confidence=0.8,
-            metadata={'article_count': 5, 'headlines': 'Company faces regulatory scrutiny'}
+            metadata={"article_count": 5, "headlines": "Company faces regulatory scrutiny"},
         ),
         SentimentSource(
-            source='social',
+            source="social",
             timestamp=datetime.now(),
             raw_sentiment=-0.6,
             normalized=-0.6,
             confidence=0.7,
-            metadata={'platform': 'weibo', 'post_count': 150, 'sentiment': 'Fearful'}
+            metadata={"platform": "weibo", "post_count": 150, "sentiment": "Fearful"},
         ),
         SentimentSource(
-            source='search',
+            source="search",
             timestamp=datetime.now(),
             raw_sentiment=-0.7,
             normalized=-0.7,
             confidence=0.6,
-            metadata={'volume_ratio': 2.5, 'price_change': -0.08}  # Panic search
+            metadata={"volume_ratio": 2.5, "price_change": -0.08},  # Panic search
         ),
         SentimentSource(
-            source='forum',
+            source="forum",
             timestamp=datetime.now(),
             raw_sentiment=-0.5,
             normalized=-0.5,
             confidence=0.5,
-            metadata={'post_count': 80}
-        )
+            metadata={"post_count": 80},
+        ),
     ]
 
     sentiment = sentiment_analyzer.calculate_sentiment("600519.SH", bearish_sources)
 
-    print(f"\n--- Sentiment Analysis ---")
+    print("\n--- Sentiment Analysis ---")
     print(f"News sentiment: {bearish_sources[0].normalized:.2f}")
     print(f"Social sentiment: {bearish_sources[1].normalized:.2f}")
     print(f"Search sentiment: {bearish_sources[2].normalized:.2f}")
@@ -128,22 +117,22 @@ def example_buy_signal():
         current_price=current_price,
         sentiment=sentiment,
         valuation=valuation,
-        portfolio_value=100000.0
+        portfolio_value=100000.0,
     )
 
-    print(f"\n--- Trading Signal ---")
+    print("\n--- Trading Signal ---")
     print(f"Signal Type: {signal.signal_type}")
     print(f"Strength: {signal.strength:.1f}/100")
     print(f"Confidence: {signal.confidence:.2f}")
     print(f"Entry Price: ¥{signal.entry_price:.2f}")
     print(f"Stop Loss: ¥{signal.stop_loss:.2f}")
     print(f"Take Profit: ¥{signal.take_profit:.2f}")
-    if signal.metadata.get('quantity'):
-        quantity = signal.metadata['quantity']
+    if signal.metadata.get("quantity"):
+        quantity = signal.metadata["quantity"]
         position_value = quantity * current_price
         print(f"Quantity: {quantity} shares")
         print(f"Position Value: ¥{position_value:.2f}")
-    print(f"\nReasons:")
+    print("\nReasons:")
     for reason in signal.reasons:
         print(f"  - {reason}")
 
@@ -164,27 +153,27 @@ def example_sell_signal():
 
     # Company: Overvalued (high PE, low dividend vs sector)
     company = ValuationMetrics(
-        pe_ratio=45.0,           # High P/E vs sector median
-        pb_ratio=4.5,            # High P/B
-        dividend_yield=0.008,    # Low dividend yield (0.8%)
-        peg_ratio=3.0,           # High PEG (expensive growth)
+        pe_ratio=45.0,  # High P/E vs sector median
+        pb_ratio=4.5,  # High P/B
+        dividend_yield=0.008,  # Low dividend yield (0.8%)
+        peg_ratio=3.0,  # High PEG (expensive growth)
         eps=1.0,
         book_value_per_share=5.0,
-        annual_dividend=0.08
+        annual_dividend=0.08,
     )
 
     # Sector: Lower valuation
     sector = SectorMetrics(
-        pe_ratio=25.0,           # Sector P/E is lower
+        pe_ratio=25.0,  # Sector P/E is lower
         pb_ratio=2.5,
         dividend_yield=0.015,
-        peg_ratio=2.0
+        peg_ratio=2.0,
     )
 
     # Calculate valuation
     valuation = valuation_calc.calculate_valuation(company, sector)
 
-    print(f"\n--- Valuation Analysis ---")
+    print("\n--- Valuation Analysis ---")
     print(f"Company PE: {company.pe_ratio:.1f} (Sector: {sector.pe_ratio:.1f})")
     print(f"Company P/B: {company.pb_ratio:.1f} (Sector: {sector.pb_ratio:.1f})")
     print(f"Company Dividend: {company.dividend_yield:.1%} (Sector: {sector.dividend_yield:.1%})")
@@ -195,42 +184,42 @@ def example_sell_signal():
     # Sentiment: Bullish (euphoria)
     bullish_sources = [
         SentimentSource(
-            source='news',
+            source="news",
             timestamp=datetime.now(),
             raw_sentiment=0.7,
             normalized=0.7,
             confidence=0.8,
-            metadata={'article_count': 8, 'headlines': 'Company announces breakthrough'}
+            metadata={"article_count": 8, "headlines": "Company announces breakthrough"},
         ),
         SentimentSource(
-            source='social',
+            source="social",
             timestamp=datetime.now(),
             raw_sentiment=0.6,
             normalized=0.6,
             confidence=0.7,
-            metadata={'platform': 'weibo', 'post_count': 300, 'sentiment': 'Excited'}
+            metadata={"platform": "weibo", "post_count": 300, "sentiment": "Excited"},
         ),
         SentimentSource(
-            source='search',
+            source="search",
             timestamp=datetime.now(),
             raw_sentiment=0.5,
             normalized=0.5,
             confidence=0.6,
-            metadata={'volume_ratio': 1.8, 'price_change': 0.06}  # FOMO
+            metadata={"volume_ratio": 1.8, "price_change": 0.06},  # FOMO
         ),
         SentimentSource(
-            source='forum',
+            source="forum",
             timestamp=datetime.now(),
             raw_sentiment=0.4,
             normalized=0.4,
             confidence=0.5,
-            metadata={'post_count': 120}
-        )
+            metadata={"post_count": 120},
+        ),
     ]
 
     sentiment = sentiment_analyzer.calculate_sentiment("000858.SZ", bullish_sources)
 
-    print(f"\n--- Sentiment Analysis ---")
+    print("\n--- Sentiment Analysis ---")
     print(f"News sentiment: {bullish_sources[0].normalized:.2f}")
     print(f"Social sentiment: {bullish_sources[1].normalized:.2f}")
     print(f"Search sentiment: {bullish_sources[2].normalized:.2f}")
@@ -247,22 +236,22 @@ def example_sell_signal():
         current_price=current_price,
         sentiment=sentiment,
         valuation=valuation,
-        portfolio_value=100000.0
+        portfolio_value=100000.0,
     )
 
-    print(f"\n--- Trading Signal ---")
+    print("\n--- Trading Signal ---")
     print(f"Signal Type: {signal.signal_type}")
     print(f"Strength: {signal.strength:.1f}/100")
     print(f"Confidence: {signal.confidence:.2f}")
     print(f"Entry Price: ¥{signal.entry_price:.2f}")
     print(f"Stop Loss: ¥{signal.stop_loss:.2f}")
     print(f"Take Profit: ¥{signal.take_profit:.2f}")
-    if signal.metadata.get('quantity'):
-        quantity = signal.metadata['quantity']
+    if signal.metadata.get("quantity"):
+        quantity = signal.metadata["quantity"]
         position_value = quantity * current_price
         print(f"Quantity: {quantity} shares")
         print(f"Position Value: ¥{position_value:.2f}")
-    print(f"\nReasons:")
+    print("\nReasons:")
     for reason in signal.reasons:
         print(f"  - {reason}")
 
@@ -283,41 +272,36 @@ def example_hold_signal():
 
     # Company: Fairly valued
     company = ValuationMetrics(
-        pe_ratio=25.0,           # At sector median
-        pb_ratio=2.5,            # At sector median
-        dividend_yield=0.015,   # At sector median
-        peg_ratio=2.0,           # At sector median
+        pe_ratio=25.0,  # At sector median
+        pb_ratio=2.5,  # At sector median
+        dividend_yield=0.015,  # At sector median
+        peg_ratio=2.0,  # At sector median
         eps=2.0,
         book_value_per_share=8.0,
-        annual_dividend=0.3
+        annual_dividend=0.3,
     )
 
     # Sector: Similar valuation
-    sector = SectorMetrics(
-        pe_ratio=25.0,
-        pb_ratio=2.5,
-        dividend_yield=0.015,
-        peg_ratio=2.0
-    )
+    sector = SectorMetrics(pe_ratio=25.0, pb_ratio=2.5, dividend_yield=0.015, peg_ratio=2.0)
 
     # Calculate valuation
     valuation = valuation_calc.calculate_valuation(company, sector)
 
-    print(f"\n--- Valuation Analysis ---")
+    print("\n--- Valuation Analysis ---")
     print(f"Valuation Score (V): {valuation.composite_score:.3f}")
     print(f"Interpretation: {valuation.interpretation}")
 
     # Sentiment: Neutral
     neutral_sources = [
-        SentimentSource('news', datetime.now(), 0.1, 0.1, 0.6, {}),
-        SentimentSource('social', datetime.now(), -0.1, -0.1, 0.5, {}),
-        SentimentSource('search', datetime.now(), 0.0, 0.0, 0.5, {}),
-        SentimentSource('forum', datetime.now(), 0.2, 0.2, 0.4, {}),
+        SentimentSource("news", datetime.now(), 0.1, 0.1, 0.6, {}),
+        SentimentSource("social", datetime.now(), -0.1, -0.1, 0.5, {}),
+        SentimentSource("search", datetime.now(), 0.0, 0.0, 0.5, {}),
+        SentimentSource("forum", datetime.now(), 0.2, 0.2, 0.4, {}),
     ]
 
     sentiment = sentiment_analyzer.calculate_sentiment("600036.SH", neutral_sources)
 
-    print(f"\n--- Sentiment Analysis ---")
+    print("\n--- Sentiment Analysis ---")
     print(f"Smoothed Score: {sentiment.smoothed_score:.2f}")
     print(f"Interpretation: {sentiment.interpretation}")
 
@@ -328,10 +312,10 @@ def example_hold_signal():
         current_price=current_price,
         sentiment=sentiment,
         valuation=valuation,
-        portfolio_value=100000.0
+        portfolio_value=100000.0,
     )
 
-    print(f"\n--- Trading Signal ---")
+    print("\n--- Trading Signal ---")
     print(f"Signal Type: {signal.signal_type}")
     print(f"Strength: {signal.strength:.1f}/100")
     print(f"Reasons: {signal.reasons}")
@@ -359,7 +343,7 @@ def example_position_tracking():
         quantity=100,
         stop_loss=92.0,  # 8% stop-loss
         take_profit=115.0,  # 15% take-profit
-        original_signal_strength=75.0
+        original_signal_strength=75.0,
     )
 
     # Add to signal generator
@@ -372,7 +356,7 @@ def example_position_tracking():
     print(f"Take Profit: ¥{position.take_profit:.2f}")
 
     # Scenario 1: Price hits stop-loss
-    print(f"\n--- Scenario 1: Stop-Loss Hit ---")
+    print("\n--- Scenario 1: Stop-Loss Hit ---")
     current_price = 91.5  # Below stop-loss
     exit_result = signal_generator.check_exit_conditions(position, current_price)
     if exit_result:
@@ -381,7 +365,7 @@ def example_position_tracking():
         print(f"Reason: {reasons[0]}")
 
     # Scenario 2: Price hits take-profit
-    print(f"\n--- Scenario 2: Take-Profit Hit ---")
+    print("\n--- Scenario 2: Take-Profit Hit ---")
     current_price = 116.0  # Above take-profit
     exit_result = signal_generator.check_exit_conditions(position, current_price)
     if exit_result:
@@ -390,25 +374,25 @@ def example_position_tracking():
         print(f"Reason: {reasons[0]}")
 
     # Scenario 3: Sentiment reversal
-    print(f"\n--- Scenario 3: Sentiment Reversal ---")
+    print("\n--- Scenario 3: Sentiment Reversal ---")
     # Current price is neutral
     current_price = 105.0
 
     # Sentiment has improved (become bullish)
     bullish_sources = [
-        SentimentSource('news', datetime.now(), 0.6, 0.6, 0.8, {}),
-        SentimentSource('social', datetime.now(), 0.5, 0.5, 0.7, {}),
-        SentimentSource('search', datetime.now(), 0.4, 0.4, 0.6, {}),
-        SentimentSource('forum', datetime.now(), 0.3, 0.3, 0.5, {}),
+        SentimentSource("news", datetime.now(), 0.6, 0.6, 0.8, {}),
+        SentimentSource("social", datetime.now(), 0.5, 0.5, 0.7, {}),
+        SentimentSource("search", datetime.now(), 0.4, 0.4, 0.6, {}),
+        SentimentSource("forum", datetime.now(), 0.3, 0.3, 0.5, {}),
     ]
 
     # Add some history for ROC calculation
     for _ in range(3):
         bearish_sources = [
-            SentimentSource('news', datetime.now(), -0.3, -0.3, 0.7, {}),
-            SentimentSource('social', datetime.now(), -0.4, -0.4, 0.6, {}),
-            SentimentSource('search', datetime.now(), -0.5, -0.5, 0.5, {}),
-            SentimentSource('forum', datetime.now(), -0.4, -0.4, 0.5, {}),
+            SentimentSource("news", datetime.now(), -0.3, -0.3, 0.7, {}),
+            SentimentSource("social", datetime.now(), -0.4, -0.4, 0.6, {}),
+            SentimentSource("search", datetime.now(), -0.5, -0.5, 0.5, {}),
+            SentimentSource("forum", datetime.now(), -0.4, -0.4, 0.5, {}),
         ]
         sentiment_analyzer.calculate_sentiment("600519.SH", bearish_sources)
 
@@ -419,9 +403,7 @@ def example_position_tracking():
     print(f"Rate of Change: {sentiment.roc:.2f}")
 
     exit_result = signal_generator.check_exit_conditions(
-        position,
-        current_price,
-        sentiment=sentiment
+        position, current_price, sentiment=sentiment
     )
     if exit_result:
         exit_type, reasons = exit_result
@@ -433,9 +415,9 @@ def example_position_tracking():
 
 def main():
     """Run all examples."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print(" CHINESE STOCK SENTIMENT TRADING SYSTEM - EXAMPLES")
-    print("="*60)
+    print("=" * 60)
 
     # Run examples
     example_buy_signal()
@@ -443,9 +425,9 @@ def main():
     example_hold_signal()
     example_position_tracking()
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print(" EXAMPLES COMPLETE")
-    print("="*60)
+    print("=" * 60)
     print("\nNext steps:")
     print("1. Customize parameters in config.json")
     print("2. Integrate with real data sources (Tushare, AkShare)")

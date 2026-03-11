@@ -8,15 +8,16 @@ These are the canonical types used throughout the trading system.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List
-
+from typing import Any
 
 # =============================================================================
 # Enums
 # =============================================================================
 
+
 class SignalType(Enum):
     """Trading signal types"""
+
     BUY = "BUY"
     SELL = "SELL"
     HOLD = "HOLD"
@@ -27,6 +28,7 @@ class SignalType(Enum):
 
 class SignalStrength(Enum):
     """Signal strength levels"""
+
     WEAK = 1
     MODERATE = 2
     STRONG = 3
@@ -34,6 +36,7 @@ class SignalStrength(Enum):
 
 class TimeFrame(Enum):
     """Supported timeframes for data"""
+
     TICK = "tick"
     MIN_1 = "1m"
     MIN_5 = "5m"
@@ -48,6 +51,7 @@ class TimeFrame(Enum):
 
 class OrderType(Enum):
     """Order types"""
+
     MARKET = "market"
     LIMIT = "limit"
     STOP = "stop"
@@ -56,12 +60,14 @@ class OrderType(Enum):
 
 class OrderSide(Enum):
     """Order sides"""
+
     BUY = "buy"
     SELL = "sell"
 
 
 class OrderStatus(Enum):
     """Order statuses"""
+
     CREATED = "created"
     VALIDATING = "validating"
     PENDING = "pending"
@@ -75,6 +81,7 @@ class OrderStatus(Enum):
 @dataclass
 class Bar:
     """OHLCV bar data"""
+
     symbol: str
     timestamp: datetime
     open: float
@@ -82,7 +89,7 @@ class Bar:
     low: float
     close: float
     volume: float
-    amount: Optional[float] = None  # Trading amount in currency
+    amount: float | None = None  # Trading amount in currency
 
     @property
     def typical_price(self) -> float:
@@ -103,6 +110,7 @@ class Bar:
 @dataclass
 class MarketData:
     """Market data point for a single symbol"""
+
     symbol: str
     timestamp: datetime
     open: float
@@ -110,7 +118,7 @@ class MarketData:
     low: float
     close: float
     volume: float
-    amount: Optional[float] = None
+    amount: float | None = None
 
     def to_bar(self) -> Bar:
         """Convert to Bar object"""
@@ -129,24 +137,25 @@ class MarketData:
 @dataclass
 class Fundamentals:
     """Fundamental data for a stock"""
+
     symbol: str
     timestamp: datetime
-    pe_ratio: Optional[float] = None
-    pe_ttm: Optional[float] = None
-    pb_ratio: Optional[float] = None
-    ps_ratio: Optional[float] = None
-    peg_ratio: Optional[float] = None
-    dividend_yield: Optional[float] = None
-    roe: Optional[float] = None
-    roa: Optional[float] = None
-    eps: Optional[float] = None
-    book_value_per_share: Optional[float] = None
-    total_mv: Optional[float] = None  # Total market value
-    circ_mv: Optional[float] = None  # Circulating market value
-    sector: Optional[str] = None
-    industry: Optional[str] = None
+    pe_ratio: float | None = None
+    pe_ttm: float | None = None
+    pb_ratio: float | None = None
+    ps_ratio: float | None = None
+    peg_ratio: float | None = None
+    dividend_yield: float | None = None
+    roe: float | None = None
+    roa: float | None = None
+    eps: float | None = None
+    book_value_per_share: float | None = None
+    total_mv: float | None = None  # Total market value
+    circ_mv: float | None = None  # Circulating market value
+    sector: str | None = None
+    industry: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             "symbol": self.symbol,
@@ -171,14 +180,15 @@ class Fundamentals:
 @dataclass
 class SentimentScore:
     """Sentiment score for a stock"""
+
     symbol: str
     timestamp: datetime
     score: float  # -1 to 1 (bearish to bullish)
     confidence: float  # 0 to 1
     source: str  # "news", "social", "search", "forum", "composite"
-    raw_score: Optional[float] = None
-    sample_size: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    raw_score: float | None = None
+    sample_size: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_bullish(self) -> bool:
@@ -203,6 +213,7 @@ class TradingSignal:
 
     This is the standard signal format that all signal generators must produce.
     """
+
     # Core fields
     symbol: str
     signal_type: SignalType
@@ -214,23 +225,23 @@ class TradingSignal:
     confidence: float  # 0-1 (model confidence)
 
     # Price levels
-    entry_price: Optional[float] = None
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
+    entry_price: float | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
     # Position sizing
-    position_size: Optional[float] = None  # Fraction of portfolio
-    quantity: Optional[int] = None  # Number of shares
+    position_size: float | None = None  # Fraction of portfolio
+    quantity: int | None = None  # Number of shares
 
     # Strategy-specific data
-    sentiment_score: Optional[float] = None
-    valuation_score: Optional[float] = None
-    price_z_score: Optional[float] = None
-    dislocation: Optional[float] = None
+    sentiment_score: float | None = None
+    valuation_score: float | None = None
+    price_z_score: float | None = None
+    dislocation: float | None = None
 
     # Metadata
-    reasons: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    reasons: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def strength_level(self) -> SignalStrength:
@@ -251,7 +262,7 @@ class TradingSignal:
         """Check if this is an exit signal"""
         return self.signal_type in [SignalType.EXIT, SignalType.EXIT_LONG, SignalType.EXIT_SHORT]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization"""
         return {
             "symbol": self.symbol,
@@ -274,7 +285,7 @@ class TradingSignal:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TradingSignal":
+    def from_dict(cls, data: dict[str, Any]) -> "TradingSignal":
         """Create from dictionary"""
         data["signal_type"] = SignalType(data["signal_type"])
         data["timestamp"] = datetime.fromisoformat(data["timestamp"])
@@ -284,7 +295,8 @@ class TradingSignal:
 @dataclass
 class PortfolioSignal:
     """Aggregated signals for portfolio construction"""
-    signals: List[TradingSignal]
+
+    signals: list[TradingSignal]
     timestamp: datetime
 
     # Exposure metrics
@@ -295,18 +307,18 @@ class PortfolioSignal:
 
     # Risk metrics
     max_single_position: float = 0.0
-    sector_concentration: Dict[str, float] = field(default_factory=dict)
+    sector_concentration: dict[str, float] = field(default_factory=dict)
 
     @property
     def signal_count(self) -> int:
         """Total number of signals"""
         return len(self.signals)
 
-    def get_signals_by_type(self, signal_type: SignalType) -> List[TradingSignal]:
+    def get_signals_by_type(self, signal_type: SignalType) -> list[TradingSignal]:
         """Filter signals by type"""
         return [s for s in self.signals if s.signal_type == signal_type]
 
-    def get_signals_by_symbol(self, symbol: str) -> List[TradingSignal]:
+    def get_signals_by_symbol(self, symbol: str) -> list[TradingSignal]:
         """Filter signals by symbol"""
         return [s for s in self.signals if s.symbol == symbol]
 
@@ -314,17 +326,18 @@ class PortfolioSignal:
 @dataclass
 class Position:
     """Active position representation"""
+
     symbol: str
     side: str  # "long" or "short"
     quantity: float
     entry_price: float
     entry_time: datetime
     current_price: float
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
-    source_signal: Optional[str] = None  # Strategy that generated the signal
+    source_signal: str | None = None  # Strategy that generated the signal
 
     @property
     def market_value(self) -> float:
@@ -356,19 +369,20 @@ class Position:
 @dataclass
 class Order:
     """Order representation"""
+
     order_id: str
     symbol: str
     side: str  # "BUY" or "SELL"
     quantity: float
     order_type: str  # "MARKET", "LIMIT", "STOP"
-    limit_price: Optional[float] = None
-    stop_price: Optional[float] = None
+    limit_price: float | None = None
+    stop_price: float | None = None
     status: str = "PENDING"
     filled_quantity: float = 0.0
-    avg_fill_price: Optional[float] = None
+    avg_fill_price: float | None = None
     timestamp: datetime = field(default_factory=datetime.now)
-    source_signal: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    source_signal: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def remaining_quantity(self) -> float:
@@ -389,6 +403,7 @@ class Order:
 @dataclass
 class Trade:
     """Executed trade representation"""
+
     trade_id: str
     order_id: str
     symbol: str
@@ -398,8 +413,8 @@ class Trade:
     timestamp: datetime
     commission: float = 0.0
     slippage: float = 0.0
-    source_signal: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    source_signal: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def notional_value(self) -> float:

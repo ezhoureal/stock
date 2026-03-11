@@ -6,43 +6,43 @@ Implements contrarian strategy: buy on pessimism + undervaluation,
 sell on euphoria + overvaluation.
 """
 
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Optional, Tuple, Literal
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Literal
 
-from valuation import ValuationCalculator, ValuationScore, ValuationConfig
-from sentiment import SentimentAnalyzer, SentimentResult, SentimentConfig
+import numpy as np
+from sentiment import SentimentAnalyzer, SentimentResult
+from valuation import ValuationCalculator, ValuationScore
 
 
 @dataclass
 class SignalConfig:
     """Configuration for signal generation"""
+
     # Sentiment thresholds
-    sentiment_threshold: float = 1.5        # |S| > 1.5 for signal
-    roc_threshold: float = 1.0             # |S_roc| > 1.0 for rapid change signal
-    min_deviation_std: float = 1.5         # Min std devs from 30-day mean
+    sentiment_threshold: float = 1.5  # |S| > 1.5 for signal
+    roc_threshold: float = 1.0  # |S_roc| > 1.0 for rapid change signal
+    min_deviation_std: float = 1.5  # Min std devs from 30-day mean
 
     # Valuation thresholds
-    undervalued_threshold: float = 0.10    # V > 0.10 for undervalued
-    overvalued_threshold: float = -0.10    # V < -0.10 for overvalued
+    undervalued_threshold: float = 0.10  # V > 0.10 for undervalued
+    overvalued_threshold: float = -0.10  # V < -0.10 for overvalued
 
     # Confirmation requirements
-    confirmation_periods: int = 2          # Signal must persist for N periods
+    confirmation_periods: int = 2  # Signal must persist for N periods
 
     # Exit conditions
-    stop_loss_pct: float = 0.08           # 8% stop-loss
-    take_profit_pct: float = 0.15         # 15% take-profit
+    stop_loss_pct: float = 0.08  # 8% stop-loss
+    take_profit_pct: float = 0.15  # 15% take-profit
 
     # Sentiment reversal thresholds
     sentiment_reversal_threshold: float = 1.0  # Exit if sentiment reverses this much
     valuation_reversal_threshold: float = 0.05  # Exit if valuation reverses this much
 
     # Position sizing
-    base_position_size: float = 0.01      # 1% of portfolio
-    max_position_size: float = 0.05        # 5% max per position
+    base_position_size: float = 0.01  # 1% of portfolio
+    max_position_size: float = 0.05  # 5% max per position
 
     # Signal strength calculation weights
     sentiment_weight: float = 0.5
@@ -52,25 +52,27 @@ class SignalConfig:
 @dataclass
 class TradingSignal:
     """A trading signal for a stock"""
+
     symbol: str
     timestamp: datetime
-    signal_type: Literal['BUY', 'SELL', 'HOLD', 'EXIT_LONG', 'EXIT_SHORT']
-    strength: float              # 0-100
-    entry_price: Optional[float] = None
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
-    confidence: float = 0.0       # Overall confidence [0, 1]
+    signal_type: Literal["BUY", "SELL", "HOLD", "EXIT_LONG", "EXIT_SHORT"]
+    strength: float  # 0-100
+    entry_price: float | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    confidence: float = 0.0  # Overall confidence [0, 1]
     sentiment_score: float = 0.0
     valuation_score: float = 0.0
-    reasons: List[str] = field(default_factory=list)
-    metadata: Dict = field(default_factory=dict)
+    reasons: list[str] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
 class Position:
     """Active position tracking"""
+
     symbol: str
-    entry_type: Literal['BUY', 'SELL']
+    entry_type: Literal["BUY", "SELL"]
     entry_price: float
     entry_date: datetime
     quantity: float
@@ -92,7 +94,7 @@ class SignalGenerator:
         self,
         sentiment_analyzer: SentimentAnalyzer,
         valuation_calculator: ValuationCalculator,
-        config: Optional[SignalConfig] = None
+        config: SignalConfig | None = None,
     ):
         """
         Initialize the signal generator.
@@ -107,15 +109,11 @@ class SignalGenerator:
         self.config = config or SignalConfig()
 
         # Track signal history for confirmation
-        self._signal_history: Dict[str, List[TradingSignal]] = {}
+        self._signal_history: dict[str, list[TradingSignal]] = {}
         # Track active positions
-        self._positions: Dict[str, Position] = {}
+        self._positions: dict[str, Position] = {}
 
-    def calculate_buy_strength(
-        self,
-        sentiment_score: float,
-        valuation_score: float
-    ) -> float:
+    def calculate_buy_strength(self, sentiment_score: float, valuation_score: float) -> float:
         """
         Calculate buy signal strength (0-100).
 
@@ -139,17 +137,13 @@ class SignalGenerator:
 
         # Combine with weights
         strength = (
-            sentiment_contrib * self.config.sentiment_weight +
-            valuation_contrib * self.config.valuation_weight
+            sentiment_contrib * self.config.sentiment_weight
+            + valuation_contrib * self.config.valuation_weight
         ) * 100
 
         return np.clip(strength, 0, 100)
 
-    def calculate_sell_strength(
-        self,
-        sentiment_score: float,
-        valuation_score: float
-    ) -> float:
+    def calculate_sell_strength(self, sentiment_score: float, valuation_score: float) -> float:
         """
         Calculate sell signal strength (0-100).
 
@@ -173,18 +167,15 @@ class SignalGenerator:
 
         # Combine with weights
         strength = (
-            sentiment_contrib * self.config.sentiment_weight +
-            valuation_contrib * self.config.valuation_weight
+            sentiment_contrib * self.config.sentiment_weight
+            + valuation_contrib * self.config.valuation_weight
         ) * 100
 
         return np.clip(strength, 0, 100)
 
     def check_buy_conditions(
-        self,
-        sentiment: SentimentResult,
-        valuation: ValuationScore,
-        current_price: float
-    ) -> Tuple[bool, List[str]]:
+        self, sentiment: SentimentResult, valuation: ValuationScore, current_price: float
+    ) -> tuple[bool, list[str]]:
         """
         Check if buy conditions are met.
 
@@ -215,32 +206,34 @@ class SignalGenerator:
 
         # Condition 2: Fundamentals undervalued
         if valuation.composite_score > self.config.undervalued_threshold:
-            reasons.append(f"Undervalued: V={valuation.composite_score:.3f} ({valuation.interpretation})")
+            reasons.append(
+                f"Undervalued: V={valuation.composite_score:.3f} ({valuation.interpretation})"
+            )
         elif valuation.composite_score > 0 and valuation.trend and valuation.trend > 0:
-            reasons.append(f"Approaching undervaluation: V={valuation.composite_score:.3f}, trend={valuation.trend:.3f}")
+            reasons.append(
+                f"Approaching undervaluation: V={valuation.composite_score:.3f}, trend={valuation.trend:.3f}"
+            )
         else:
             is_signal = False
             reasons.append("Not undervalued")
 
         # Condition 3: Minimum deviation from mean
         is_extreme, z_score = self.sentiment_analyzer.is_sentiment_extreme(
-            sentiment.symbol,
-            self.config.min_deviation_std
+            sentiment.symbol, self.config.min_deviation_std
         )
         if is_extreme:
             reasons.append(f"Sentiment extreme: {z_score:.2f} std devs from mean")
         else:
             is_signal = False
-            reasons.append(f"Sentiment not extreme enough: {z_score:.2f} < {self.config.min_deviation_std}")
+            reasons.append(
+                f"Sentiment not extreme enough: {z_score:.2f} < {self.config.min_deviation_std}"
+            )
 
         return is_signal, reasons
 
     def check_sell_conditions(
-        self,
-        sentiment: SentimentResult,
-        valuation: ValuationScore,
-        current_price: float
-    ) -> Tuple[bool, List[str]]:
+        self, sentiment: SentimentResult, valuation: ValuationScore, current_price: float
+    ) -> tuple[bool, list[str]]:
         """
         Check if sell conditions are met.
 
@@ -271,23 +264,28 @@ class SignalGenerator:
 
         # Condition 2: Fundamentals overvalued
         if valuation.composite_score < self.config.overvalued_threshold:
-            reasons.append(f"Overvalued: V={valuation.composite_score:.3f} ({valuation.interpretation})")
+            reasons.append(
+                f"Overvalued: V={valuation.composite_score:.3f} ({valuation.interpretation})"
+            )
         elif valuation.composite_score < 0 and valuation.trend and valuation.trend < 0:
-            reasons.append(f"Approaching overvaluation: V={valuation.composite_score:.3f}, trend={valuation.trend:.3f}")
+            reasons.append(
+                f"Approaching overvaluation: V={valuation.composite_score:.3f}, trend={valuation.trend:.3f}"
+            )
         else:
             is_signal = False
             reasons.append("Not overvalued")
 
         # Condition 3: Minimum deviation from mean
         is_extreme, z_score = self.sentiment_analyzer.is_sentiment_extreme(
-            sentiment.symbol,
-            self.config.min_deviation_std
+            sentiment.symbol, self.config.min_deviation_std
         )
         if is_extreme:
             reasons.append(f"Sentiment extreme: {z_score:.2f} std devs from mean")
         else:
             is_signal = False
-            reasons.append(f"Sentiment not extreme enough: {z_score:.2f} < {self.config.min_deviation_std}")
+            reasons.append(
+                f"Sentiment not extreme enough: {z_score:.2f} < {self.config.min_deviation_std}"
+            )
 
         return is_signal, reasons
 
@@ -317,9 +315,9 @@ class SignalGenerator:
         self,
         position: Position,
         current_price: float,
-        sentiment: Optional[SentimentResult] = None,
-        valuation: Optional[ValuationScore] = None
-    ) -> Optional[Tuple[str, List[str]]]:
+        sentiment: SentimentResult | None = None,
+        valuation: ValuationScore | None = None,
+    ) -> tuple[str, list[str]] | None:
         """
         Check if an active position should be exited.
 
@@ -340,51 +338,60 @@ class SignalGenerator:
         reasons = []
 
         # Stop-loss
-        if position.entry_type == 'BUY':
+        if position.entry_type == "BUY":
             if current_price <= position.stop_loss:
                 reasons.append(f"Stop-loss hit: {current_price:.2f} <= {position.stop_loss:.2f}")
-                return ('EXIT_LONG', reasons)
+                return ("EXIT_LONG", reasons)
         else:  # SELL
             if current_price >= position.stop_loss:
                 reasons.append(f"Stop-loss hit: {current_price:.2f} >= {position.stop_loss:.2f}")
-                return ('EXIT_SHORT', reasons)
+                return ("EXIT_SHORT", reasons)
 
         # Take-profit
-        if position.entry_type == 'BUY':
+        if position.entry_type == "BUY":
             if current_price >= position.take_profit:
-                reasons.append(f"Take-profit hit: {current_price:.2f} >= {position.take_profit:.2f}")
-                return ('EXIT_LONG', reasons)
+                reasons.append(
+                    f"Take-profit hit: {current_price:.2f} >= {position.take_profit:.2f}"
+                )
+                return ("EXIT_LONG", reasons)
         else:  # SELL
             if current_price <= position.take_profit:
-                reasons.append(f"Take-profit hit: {current_price:.2f} <= {position.take_profit:.2f}")
-                return ('EXIT_SHORT', reasons)
+                reasons.append(
+                    f"Take-profit hit: {current_price:.2f} <= {position.take_profit:.2f}"
+                )
+                return ("EXIT_SHORT", reasons)
 
         # Signal reversal
         if sentiment and valuation:
-            if position.entry_type == 'BUY':
+            if position.entry_type == "BUY":
                 # Exit long if sentiment improved or valuation deteriorated
                 if sentiment.smoothed_score > self.config.sentiment_reversal_threshold:
-                    reasons.append(f"Sentiment reversal: {sentiment.smoothed_score:.2f} > {self.config.sentiment_reversal_threshold}")
-                    return ('EXIT_LONG', reasons)
+                    reasons.append(
+                        f"Sentiment reversal: {sentiment.smoothed_score:.2f} > {self.config.sentiment_reversal_threshold}"
+                    )
+                    return ("EXIT_LONG", reasons)
                 if valuation.composite_score < self.config.valuation_reversal_threshold:
-                    reasons.append(f"Valuation reversal: {valuation.composite_score:.3f} < {self.config.valuation_reversal_threshold}")
-                    return ('EXIT_LONG', reasons)
+                    reasons.append(
+                        f"Valuation reversal: {valuation.composite_score:.3f} < {self.config.valuation_reversal_threshold}"
+                    )
+                    return ("EXIT_LONG", reasons)
             else:  # SELL
                 # Exit short if sentiment deteriorated or valuation improved
                 if sentiment.smoothed_score < -self.config.sentiment_reversal_threshold:
-                    reasons.append(f"Sentiment reversal: {sentiment.smoothed_score:.2f} < -{self.config.sentiment_reversal_threshold}")
-                    return ('EXIT_SHORT', reasons)
+                    reasons.append(
+                        f"Sentiment reversal: {sentiment.smoothed_score:.2f} < -{self.config.sentiment_reversal_threshold}"
+                    )
+                    return ("EXIT_SHORT", reasons)
                 if valuation.composite_score > self.config.valuation_reversal_threshold:
-                    reasons.append(f"Valuation reversal: {valuation.composite_score:.3f} > {self.config.valuation_reversal_threshold}")
-                    return ('EXIT_SHORT', reasons)
+                    reasons.append(
+                        f"Valuation reversal: {valuation.composite_score:.3f} > {self.config.valuation_reversal_threshold}"
+                    )
+                    return ("EXIT_SHORT", reasons)
 
         return None
 
     def calculate_position_size(
-        self,
-        signal_strength: float,
-        portfolio_value: float,
-        current_price: float
+        self, signal_strength: float, portfolio_value: float, current_price: float
     ) -> float:
         """
         Calculate position size based on signal strength.
@@ -425,7 +432,7 @@ class SignalGenerator:
         current_price: float,
         sentiment: SentimentResult,
         valuation: ValuationScore,
-        portfolio_value: float = 100000.0
+        portfolio_value: float = 100000.0,
     ) -> TradingSignal:
         """
         Generate a trading signal.
@@ -445,10 +452,7 @@ class SignalGenerator:
         # Check for exit on existing position
         if symbol in self._positions:
             exit_result = self.check_exit_conditions(
-                self._positions[symbol],
-                current_price,
-                sentiment,
-                valuation
+                self._positions[symbol], current_price, sentiment, valuation
             )
             if exit_result:
                 exit_type, reasons = exit_result
@@ -464,18 +468,14 @@ class SignalGenerator:
                     sentiment_score=sentiment.smoothed_score,
                     valuation_score=valuation.composite_score,
                     reasons=reasons,
-                    metadata={'exit_reason': exit_type}
+                    metadata={"exit_reason": exit_type},
                 )
                 self._record_signal(signal)
                 return signal
 
         # Check for new signals
-        buy_signal, buy_reasons = self.check_buy_conditions(
-            sentiment, valuation, current_price
-        )
-        sell_signal, sell_reasons = self.check_sell_conditions(
-            sentiment, valuation, current_price
-        )
+        buy_signal, buy_reasons = self.check_buy_conditions(sentiment, valuation, current_price)
+        sell_signal, sell_reasons = self.check_sell_conditions(sentiment, valuation, current_price)
 
         # Determine signal type
         if buy_signal and sell_signal:
@@ -487,27 +487,27 @@ class SignalGenerator:
                 sentiment.smoothed_score, valuation.composite_score
             )
             if buy_strength >= sell_strength:
-                signal_type = 'BUY'
+                signal_type = "BUY"
                 reasons = buy_reasons
                 strength = buy_strength
             else:
-                signal_type = 'SELL'
+                signal_type = "SELL"
                 reasons = sell_reasons
                 strength = sell_strength
         elif buy_signal:
-            signal_type = 'BUY'
+            signal_type = "BUY"
             reasons = buy_reasons
             strength = self.calculate_buy_strength(
                 sentiment.smoothed_score, valuation.composite_score
             )
         elif sell_signal:
-            signal_type = 'SELL'
+            signal_type = "SELL"
             reasons = sell_reasons
             strength = self.calculate_sell_strength(
                 sentiment.smoothed_score, valuation.composite_score
             )
         else:
-            signal_type = 'HOLD'
+            signal_type = "HOLD"
             reasons = ["No clear signal"]
             strength = 0.0
 
@@ -515,16 +515,16 @@ class SignalGenerator:
         stop_loss = None
         take_profit = None
 
-        if signal_type == 'BUY':
+        if signal_type == "BUY":
             stop_loss = current_price * (1 - self.config.stop_loss_pct)
             take_profit = current_price * (1 + self.config.take_profit_pct)
-        elif signal_type == 'SELL':
+        elif signal_type == "SELL":
             stop_loss = current_price * (1 + self.config.stop_loss_pct)
             take_profit = current_price * (1 - self.config.take_profit_pct)
 
         # Calculate position size for entry signals
         quantity = None
-        if signal_type in ['BUY', 'SELL'] and strength > 20:
+        if signal_type in ["BUY", "SELL"] and strength > 20:
             quantity = self.calculate_position_size(strength, portfolio_value, current_price)
 
         # Calculate confidence (based on signal strength and source confidence)
@@ -545,7 +545,7 @@ class SignalGenerator:
             sentiment_score=sentiment.smoothed_score,
             valuation_score=valuation.composite_score,
             reasons=reasons,
-            metadata={'quantity': quantity}
+            metadata={"quantity": quantity},
         )
 
         # Record signal
@@ -573,15 +573,11 @@ class SignalGenerator:
         if symbol in self._positions:
             del self._positions[symbol]
 
-    def get_positions(self) -> Dict[str, Position]:
+    def get_positions(self) -> dict[str, Position]:
         """Get all active positions."""
         return self._positions.copy()
 
-    def get_signal_history(
-        self,
-        symbol: Optional[str] = None,
-        limit: int = 10
-    ) -> List[TradingSignal]:
+    def get_signal_history(self, symbol: str | None = None, limit: int = 10) -> list[TradingSignal]:
         """Get signal history."""
         if symbol:
             history = self._signal_history.get(symbol, [])
@@ -607,7 +603,7 @@ def load_config(config_path: str) -> SignalConfig:
     Returns:
         SignalConfig instance
     """
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         config_dict = json.load(f)
 
     return SignalConfig(**config_dict)
@@ -617,7 +613,7 @@ def load_config(config_path: str) -> SignalConfig:
 if __name__ == "__main__":
     # Initialize components
     from sentiment import SentimentAnalyzer, SentimentSource
-    from valuation import ValuationCalculator, ValuationMetrics, SectorMetrics
+    from valuation import SectorMetrics, ValuationCalculator, ValuationMetrics
 
     sentiment_analyzer = SentimentAnalyzer()
     valuation_calculator = ValuationCalculator()
@@ -625,17 +621,22 @@ if __name__ == "__main__":
 
     # Create example sentiment (bearish)
     bearish_sources = [
-        SentimentSource('news', datetime.now(), -0.4, -0.4, 0.8, {}),
-        SentimentSource('social', datetime.now(), -0.6, -0.6, 0.7, {}),
-        SentimentSource('search', datetime.now(), -0.7, -0.7, 0.6, {}),
-        SentimentSource('forum', datetime.now(), -0.5, -0.5, 0.5, {}),
+        SentimentSource("news", datetime.now(), -0.4, -0.4, 0.8, {}),
+        SentimentSource("social", datetime.now(), -0.6, -0.6, 0.7, {}),
+        SentimentSource("search", datetime.now(), -0.7, -0.7, 0.6, {}),
+        SentimentSource("forum", datetime.now(), -0.5, -0.5, 0.5, {}),
     ]
     sentiment = sentiment_analyzer.calculate_sentiment("600519.SH", bearish_sources)
 
     # Create example valuation (undervalued)
     company = ValuationMetrics(
-        pe_ratio=15.0, pb_ratio=2.5, dividend_yield=0.02, peg_ratio=1.2,
-        eps=2.0, book_value_per_share=8.0, annual_dividend=0.4
+        pe_ratio=15.0,
+        pb_ratio=2.5,
+        dividend_yield=0.02,
+        peg_ratio=1.2,
+        eps=2.0,
+        book_value_per_share=8.0,
+        annual_dividend=0.4,
     )
     sector = SectorMetrics(pe_ratio=25.0, pb_ratio=2.5, dividend_yield=0.015, peg_ratio=1.8)
     valuation = valuation_calculator.calculate_valuation(company, sector)
@@ -646,7 +647,7 @@ if __name__ == "__main__":
         current_price=100.0,
         sentiment=sentiment,
         valuation=valuation,
-        portfolio_value=100000.0
+        portfolio_value=100000.0,
     )
 
     print("=== Trading Signal ===")
@@ -657,10 +658,10 @@ if __name__ == "__main__":
     print(f"Entry Price: ¥{signal.entry_price:.2f}")
     print(f"Stop Loss: ¥{signal.stop_loss:.2f}")
     print(f"Take Profit: ¥{signal.take_profit:.2f}")
-    if signal.metadata.get('quantity'):
+    if signal.metadata.get("quantity"):
         print(f"Quantity: {signal.metadata['quantity']} shares")
     print(f"\nSentiment Score: {signal.sentiment_score:.2f}")
     print(f"Valuation Score: {signal.valuation_score:.3f}")
-    print(f"\nReasons:")
+    print("\nReasons:")
     for reason in signal.reasons:
         print(f"  - {reason}")

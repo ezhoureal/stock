@@ -1,12 +1,12 @@
 """
 Position Tracker - Track positions and P&L in real-time
 """
-import sys
+
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from typing import Optional, Dict, List
-from datetime import datetime
 
 from broker.base import Position
 
@@ -16,7 +16,7 @@ class PositionTracker:
 
     def __init__(self):
         """Initialize position tracker"""
-        self.positions: Dict[str, Position] = {}
+        self.positions: dict[str, Position] = {}
 
     def update_position(self, symbol: str, quantity: int, price: float) -> float:
         """
@@ -77,7 +77,7 @@ class PositionTracker:
         if position:
             position.update_price(price)
 
-    def get_position(self, symbol: str) -> Optional[Position]:
+    def get_position(self, symbol: str) -> Position | None:
         """
         Get position for a specific symbol
 
@@ -89,7 +89,7 @@ class PositionTracker:
         """
         return self.positions.get(symbol)
 
-    def get_positions(self) -> List[Position]:
+    def get_positions(self) -> list[Position]:
         """
         Get all positions
 
@@ -125,7 +125,7 @@ class PositionTracker:
         """
         return sum(p.market_value for p in self.positions.values())
 
-    def get_total_quantity(self, symbol: Optional[str] = None) -> int:
+    def get_total_quantity(self, symbol: str | None = None) -> int:
         """
         Get total quantity (for specific symbol or all)
 
@@ -155,7 +155,7 @@ class PositionTracker:
         """Check if no position for a symbol"""
         return symbol not in self.positions
 
-    def close_position(self, symbol: str, price: float) -> Optional[float]:
+    def close_position(self, symbol: str, price: float) -> float | None:
         """
         Close entire position for a symbol
 
@@ -176,7 +176,7 @@ class PositionTracker:
 
         return realized_pnl
 
-    def get_position_summary(self) -> Dict[str, any]:
+    def get_position_summary(self) -> dict[str, any]:
         """
         Get position summary
 
@@ -184,17 +184,17 @@ class PositionTracker:
             Dict with position summary information
         """
         return {
-            'num_positions': len(self.positions),
-            'total_market_value': self.get_total_market_value(),
-            'total_unrealized_pnl': self.get_total_unrealized_pnl(),
-            'total_realized_pnl': self.get_total_realized_pnl(),
-            'positions': [
+            "num_positions": len(self.positions),
+            "total_market_value": self.get_total_market_value(),
+            "total_unrealized_pnl": self.get_total_unrealized_pnl(),
+            "total_realized_pnl": self.get_total_realized_pnl(),
+            "positions": [
                 {
-                    'symbol': p.symbol,
-                    'quantity': p.quantity,
-                    'avg_cost': p.avg_cost,
-                    'current_price': p.current_price,
-                    'unrealized_pnl': p.unrealized_pnl,
+                    "symbol": p.symbol,
+                    "quantity": p.quantity,
+                    "avg_cost": p.avg_cost,
+                    "current_price": p.current_price,
+                    "unrealized_pnl": p.unrealized_pnl,
                 }
                 for p in self.positions.values()
             ],

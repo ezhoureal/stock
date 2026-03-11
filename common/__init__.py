@@ -16,51 +16,52 @@ Usage:
     print(result.summary())
 """
 
-from .types import (
-    SignalType,
-    SignalStrength,
-    TradingSignal,
-    PortfolioSignal,
-    MarketData,
-    Fundamentals,
-    SentimentScore,
-    Bar,
-    TimeFrame,
-    Position,
-    Order,
-    Trade,
-)
-from .interfaces import (
-    DataProvider,
-    SignalGenerator,
-    ExecutionClient,
-    SignalRouter,
-    BacktestEngine,
-    BacktestResult,
-)
+from backtest.engine import BacktestEngineImpl, run_backtest
+from data.providers.duckdb_provider import DuckDBDataProvider
+
 from .config import (
-    RouterConfig,
     BacktestConfig,
-    SystemConfig,
+    ContrarianConfig,
     DataConfig,
     ExecutionConfig,
-    StrategyConfig,
+    RouterConfig,
     SentimentArbConfig,
-    ContrarianConfig,
+    StrategyConfig,
+    SystemConfig,
 )
-from .signal_router import SignalRouterImpl
-from .strategy_adapters import (
-    SentimentArbAdapter,
-    ContrarianAdapter,
-    create_strategy_adapters,
+from .interfaces import (
+    BacktestEngine,
+    BacktestResult,
+    DataProvider,
+    ExecutionClient,
+    SignalGenerator,
+    SignalRouter,
 )
 from .orchestrator import (
     TradingSystem,
     create_system,
     quick_backtest,
 )
-from backtest.engine import BacktestEngineImpl, run_backtest
-from data.providers.duckdb_provider import DuckDBDataProvider
+from .signal_router import SignalRouterImpl
+from .strategy_adapters import (
+    ContrarianAdapter,
+    SentimentArbAdapter,
+    create_strategy_adapters,
+)
+from .types import (
+    Bar,
+    Fundamentals,
+    MarketData,
+    Order,
+    PortfolioSignal,
+    Position,
+    SentimentScore,
+    SignalStrength,
+    SignalType,
+    TimeFrame,
+    Trade,
+    TradingSignal,
+)
 
 __all__ = [
     # Types

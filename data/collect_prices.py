@@ -9,14 +9,13 @@ Usage:
     python collect_prices.py --source auto  # Automatically chooses best source
 """
 
-import sys
-import os
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Tuple
+import os
+import sys
 import time
 import traceback
+from datetime import datetime, timedelta
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,32 +23,36 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler('/home/zireael/trade/stocks/data/logs/price_collection.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.FileHandler("/home/zireael/trade/stocks/data/logs/price_collection.log"),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 logger = logging.getLogger(__name__)
 
 
 class DataCollectionError(Exception):
     """Base exception for data collection errors"""
+
     pass
 
 
 class DataSourceError(DataCollectionError):
     """Error specific to data source API"""
+
     pass
 
 
 class DataValidationError(DataCollectionError):
     """Error in data validation"""
+
     pass
 
 
 class RateLimitError(DataCollectionError):
     """Rate limit hit on API"""
+
     pass
 
 
@@ -66,7 +69,7 @@ class PriceCollector:
             config_path: Path to configuration file
         """
         self.config = self._load_config(config_path)
-        self.db_path = self.config['database']['path']
+        self.db_path = self.config["database"]["path"]
         self.logger = logger
 
         # Load data source modules lazily
@@ -83,10 +86,10 @@ class PriceCollector:
         self.retry_delay = 1.0  # Initial delay in seconds
         self.retry_backoff = 2.0  # Exponential backoff multiplier
 
-    def _load_config(self, config_path: str) -> Dict:
+    def _load_config(self, config_path: str) -> dict:
         """Load configuration from JSON file"""
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 return json.load(f)
         except Exception as e:
             self.logger.error(f"Failed to load config: {e}")
@@ -126,7 +129,9 @@ class PriceCollector:
             try:
                 return func(*args, **kwargs)
             except RateLimitError as e:
-                self.logger.warning(f"Rate limit hit (attempt {attempt + 1}/{self.max_retries}): {e}")
+                self.logger.warning(
+                    f"Rate limit hit (attempt {attempt + 1}/{self.max_retries}): {e}"
+                )
                 if attempt < self.max_retries - 1:
                     self.logger.info(f"Waiting {delay}s before retry...")
                     time.sleep(delay)
@@ -147,6 +152,7 @@ class PriceCollector:
         if self._baostock is None:
             try:
                 import baostock as bs
+
                 self._baostock = bs
                 self.logger.info("Baostock loaded successfully")
             except ImportError:
@@ -158,6 +164,7 @@ class PriceCollector:
         if self._akshare is None:
             try:
                 import akshare as ak
+
                 self._akshare = ak
                 self.logger.info("Akshare loaded successfully")
             except ImportError:
@@ -168,6 +175,7 @@ class PriceCollector:
         """Connect to DuckDB database"""
         try:
             import duckdb
+
             conn = duckdb.connect(self.db_path)
             return conn
         except Exception as e:
@@ -186,7 +194,7 @@ class PriceCollector:
         if df is None or len(df) == 0:
             raise DataValidationError("Empty price data")
 
-        required_columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+        required_columns = ["date", "open", "high", "low", "close", "volume"]
         missing = [col for col in required_columns if col not in df.columns]
 
         if missing:
@@ -199,24 +207,19 @@ class PriceCollector:
             # Don't fail, just warn
 
         # Check price ranges
-        for col in ['open', 'high', 'low', 'close']:
+        for col in ["open", "high", "low", "close"]:
             invalid = (df[col] <= 0) | (df[col] > 100000)
             if invalid.any():
                 self.logger.warning(f"Invalid price values in {col}: {invalid.sum()} rows")
 
         # Check high >= low >= 0
-        invalid_hl = df['high'] < df['low']
+        invalid_hl = df["high"] < df["low"]
         if invalid_hl.any():
             raise DataValidationError(f"High < Low in {invalid_hl.sum()} rows")
 
         return True
 
-    def fetch_prices_baostock(
-        self,
-        stock_id: str,
-        start_date: str,
-        end_date: str
-    ):
+    def fetch_prices_baostock(self, stock_id: str, start_date: str, end_date: str):
         """
         Fetch historical prices from Baostock.
 
@@ -234,7 +237,7 @@ class PriceCollector:
         bs = self._get_baostock()
 
         # Convert stock_id to baostock format
-        if stock_id.startswith('6'):
+        if stock_id.startswith("6"):
             bs_code = f"sh.{stock_id}"
         else:
             bs_code = f"sz.{stock_id}"
@@ -248,14 +251,14 @@ class PriceCollector:
                 start_date=start_date,
                 end_date=end_date,
                 frequency="d",
-                adjustflag="2"  # 2=复权
+                adjustflag="2",  # 2=复权
             )
 
-            if rs.error_code != '0':
+            if rs.error_code != "0":
                 raise DataSourceError(f"Baostock API error: {rs.error_code} - {rs.error_msg}")
 
             data_list = []
-            while (rs.error_code == '0') & rs.next():
+            while (rs.error_code == "0") & rs.next():
                 data_list.append(rs.get_row_data())
 
             if not data_list:
@@ -264,19 +267,20 @@ class PriceCollector:
 
             # Convert to DataFrame
             import pandas as pd
+
             df = pd.DataFrame(data_list, columns=rs.fields)
 
             # Convert data types
-            df['date'] = pd.to_datetime(df['date'])
-            numeric_cols = ['open', 'high', 'low', 'close', 'volume', 'amount', 'turn', 'pctChg']
+            df["date"] = pd.to_datetime(df["date"])
+            numeric_cols = ["open", "high", "low", "close", "volume", "amount", "turn", "pctChg"]
             for col in numeric_cols:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+                df[col] = pd.to_numeric(df[col], errors="coerce")
 
             # Filter out suspended days
-            df = df[df['tradestatus'] == '1']
+            df = df[df["tradestatus"] == "1"]
 
             # Keep only needed columns
-            df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
+            df = df[["date", "open", "high", "low", "close", "volume"]]
 
             return df
 
@@ -284,12 +288,7 @@ class PriceCollector:
             self.logger.error(f"Baostock fetch failed for {stock_id}: {e}")
             raise DataSourceError(f"Baostock fetch failed: {e}")
 
-    def fetch_prices_akshare(
-        self,
-        stock_id: str,
-        start_date: str,
-        end_date: str
-    ):
+    def fetch_prices_akshare(self, stock_id: str, start_date: str, end_date: str):
         """
         Fetch historical prices from Akshare.
 
@@ -312,7 +311,7 @@ class PriceCollector:
             import pandas as pd
 
             # Akshare requires stock code with exchange suffix
-            if stock_id.startswith('6'):
+            if stock_id.startswith("6"):
                 ak_code = f"{stock_id}.SH"
             else:
                 ak_code = f"{stock_id}.SZ"
@@ -321,9 +320,9 @@ class PriceCollector:
             df = ak.stock_zh_a_hist(
                 symbol=ak_code,
                 period="daily",
-                start_date=start_date.replace('-', ''),
-                end_date=end_date.replace('-', ''),
-                adjust="qfq"  # 前复权
+                start_date=start_date.replace("-", ""),
+                end_date=end_date.replace("-", ""),
+                adjust="qfq",  # 前复权
             )
 
             if df is None or len(df) == 0:
@@ -332,21 +331,21 @@ class PriceCollector:
 
             # Rename columns to match expected format
             column_mapping = {
-                '日期': 'date',
-                '开盘': 'open',
-                '最高': 'high',
-                '最低': 'low',
-                '收盘': 'close',
-                '成交量': 'volume'
+                "日期": "date",
+                "开盘": "open",
+                "最高": "high",
+                "最低": "low",
+                "收盘": "close",
+                "成交量": "volume",
             }
 
             df = df.rename(columns=column_mapping)
 
             # Convert date
-            df['date'] = pd.to_datetime(df['date'])
+            df["date"] = pd.to_datetime(df["date"])
 
             # Keep only needed columns
-            df = df[['date', 'open', 'high', 'low', 'close', 'volume']]
+            df = df[["date", "open", "high", "low", "close", "volume"]]
 
             return df
 
@@ -354,13 +353,7 @@ class PriceCollector:
             self.logger.error(f"Akshare fetch failed for {stock_id}: {e}")
             raise DataSourceError(f"Akshare fetch failed: {e}")
 
-    def fetch_prices(
-        self,
-        stock_id: str,
-        start_date: str,
-        end_date: str,
-        source: str = 'auto'
-    ):
+    def fetch_prices(self, stock_id: str, start_date: str, end_date: str, source: str = "auto"):
         """
         Fetch historical prices with automatic source selection and fallback.
 
@@ -378,9 +371,9 @@ class PriceCollector:
         """
         self._rate_limit()
 
-        if source == 'auto':
+        if source == "auto":
             # Try baostock first (more reliable), then akshare
-            sources = ['baostock', 'akshare']
+            sources = ["baostock", "akshare"]
         else:
             sources = [source]
 
@@ -390,15 +383,13 @@ class PriceCollector:
             try:
                 self.logger.info(f"Trying source: {src}")
 
-                if src == 'baostock':
+                if src == "baostock":
                     df = self._retry_with_backoff(
-                        self.fetch_prices_baostock,
-                        stock_id, start_date, end_date
+                        self.fetch_prices_baostock, stock_id, start_date, end_date
                     )
-                elif src == 'akshare':
+                elif src == "akshare":
                     df = self._retry_with_backoff(
-                        self.fetch_prices_akshare,
-                        stock_id, start_date, end_date
+                        self.fetch_prices_akshare, stock_id, start_date, end_date
                     )
                 else:
                     raise DataSourceError(f"Unknown source: {src}")
@@ -421,13 +412,7 @@ class PriceCollector:
 
         raise DataCollectionError(f"All sources failed for {stock_id}. Last error: {last_error}")
 
-    def save_prices(
-        self,
-        conn,
-        stock_id: str,
-        df,
-        source: str = 'unknown'
-    ) -> int:
+    def save_prices(self, conn, stock_id: str, df, source: str = "unknown") -> int:
         """
         Save price data to database.
 
@@ -447,32 +432,53 @@ class PriceCollector:
 
             for _, row in df.iterrows():
                 # Check if record exists
-                existing = conn.execute("""
+                existing = conn.execute(
+                    """
                     SELECT 1 FROM daily_prices
                     WHERE stock_id = ? AND date = ?
-                """, [stock_id, row['date']]).fetchone()
+                """,
+                    [stock_id, row["date"]],
+                ).fetchone()
 
                 if existing:
                     # Update existing record
-                    conn.execute("""
+                    conn.execute(
+                        """
                         UPDATE daily_prices
                         SET open = ?, high = ?, low = ?, close = ?, volume = ?,
                             data_source = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE stock_id = ? AND date = ?
-                    """, [
-                        row['open'], row['high'], row['low'], row['close'],
-                        row['volume'], source, stock_id, row['date']
-                    ])
+                    """,
+                        [
+                            row["open"],
+                            row["high"],
+                            row["low"],
+                            row["close"],
+                            row["volume"],
+                            source,
+                            stock_id,
+                            row["date"],
+                        ],
+                    )
                 else:
                     # Insert new record
-                    conn.execute("""
+                    conn.execute(
+                        """
                         INSERT INTO daily_prices
                         (stock_id, date, open, high, low, close, volume, data_source, created_at, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    """, [
-                        stock_id, row['date'], row['open'], row['high'],
-                        row['low'], row['close'], row['volume'], source
-                    ])
+                    """,
+                        [
+                            stock_id,
+                            row["date"],
+                            row["open"],
+                            row["high"],
+                            row["low"],
+                            row["close"],
+                            row["volume"],
+                            source,
+                        ],
+                    )
                     inserted_count += 1
 
             conn.execute("COMMIT")
@@ -486,10 +492,10 @@ class PriceCollector:
 
     def collect_prices(
         self,
-        stock_ids: Optional[List[str]] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        source: str = 'auto'
+        stock_ids: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        source: str = "auto",
     ):
         """
         Collect historical prices for multiple stocks.
@@ -520,9 +526,9 @@ class PriceCollector:
 
             # Set date range
             if end_date is None:
-                end_date = datetime.now().strftime('%Y-%m-%d')
+                end_date = datetime.now().strftime("%Y-%m-%d")
             if start_date is None:
-                start_date = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+                start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
             self.logger.info(f"Date range: {start_date} to {end_date}")
             self.logger.info(f"Data source: {source}")
@@ -530,17 +536,17 @@ class PriceCollector:
 
             # Statistics
             stats = {
-                'total_stocks': len(stock_ids),
-                'success': 0,
-                'failed': 0,
-                'total_records': 0,
-                'failed_stocks': []
+                "total_stocks": len(stock_ids),
+                "success": 0,
+                "failed": 0,
+                "total_records": 0,
+                "failed_stocks": [],
             }
 
             # Process each stock
             for i, stock_id in enumerate(stock_ids):
                 try:
-                    self.logger.info(f"[{i+1}/{len(stock_ids)}] Processing {stock_id}...")
+                    self.logger.info(f"[{i + 1}/{len(stock_ids)}] Processing {stock_id}...")
 
                     # Fetch prices
                     df = self.fetch_prices(stock_id, start_date, end_date, source)
@@ -548,13 +554,13 @@ class PriceCollector:
                     if df is not None:
                         # Save to database
                         inserted = self.save_prices(conn, stock_id, df, source)
-                        stats['total_records'] += inserted
-                        stats['success'] += 1
+                        stats["total_records"] += inserted
+                        stats["success"] += 1
 
                 except DataCollectionError as e:
                     self.logger.error(f"Failed to collect prices for {stock_id}: {e}")
-                    stats['failed'] += 1
-                    stats['failed_stocks'].append(stock_id)
+                    stats["failed"] += 1
+                    stats["failed_stocks"].append(stock_id)
                     continue
 
             # Print summary
@@ -566,7 +572,7 @@ class PriceCollector:
             self.logger.info(f"Failed: {stats['failed']}")
             self.logger.info(f"Total records collected: {stats['total_records']}")
 
-            if stats['failed_stocks']:
+            if stats["failed_stocks"]:
                 self.logger.warning(f"Failed stocks: {', '.join(stats['failed_stocks'])}")
 
             return stats
@@ -581,28 +587,15 @@ def main():
 
     parser = argparse.ArgumentParser(description="Collect historical stock prices")
     parser.add_argument(
-        '--source',
-        choices=['auto', 'baostock', 'akshare'],
-        default='auto',
-        help='Data source to use'
+        "--source",
+        choices=["auto", "baostock", "akshare"],
+        default="auto",
+        help="Data source to use",
     )
-    parser.add_argument(
-        '--start-date',
-        help='Start date (YYYY-MM-DD, default: 1 year ago)'
-    )
-    parser.add_argument(
-        '--end-date',
-        help='End date (YYYY-MM-DD, default: today)'
-    )
-    parser.add_argument(
-        '--stock-id',
-        help='Specific stock ID to collect (default: all CSI 300)'
-    )
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose logging'
-    )
+    parser.add_argument("--start-date", help="Start date (YYYY-MM-DD, default: 1 year ago)")
+    parser.add_argument("--end-date", help="End date (YYYY-MM-DD, default: today)")
+    parser.add_argument("--stock-id", help="Specific stock ID to collect (default: all CSI 300)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
 
@@ -620,11 +613,11 @@ def main():
             stock_ids=stock_ids,
             start_date=args.start_date,
             end_date=args.end_date,
-            source=args.source
+            source=args.source,
         )
 
         # Exit with error if any failures
-        if stats['failed'] > 0:
+        if stats["failed"] > 0:
             sys.exit(1)
 
         sys.exit(0)

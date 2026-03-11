@@ -10,34 +10,28 @@ Demonstrates the complete trading system working together:
 """
 
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
-import pandas as pd
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "broker" / "python"))
 
+from broker.base import Order, OrderSide, OrderType
+from broker.mock import MockBroker
+
 from common import (
-    TradingSignal,
-    SignalType,
     DataProvider,
-    SignalGenerator,
-    SignalRouterImpl,
-    RouterConfig,
-    BacktestEngineImpl,
-    BacktestConfig,
-    BacktestResult,
-    Bar,
-    TimeFrame,
     Fundamentals,
     SentimentScore,
+    SignalGenerator,
+    SignalType,
+    TimeFrame,
+    TradingSignal,
 )
-
-from broker.mock import MockBroker
-from broker.base import Order, OrderSide, OrderType
 
 
 class MockDataProvider(DataProvider):
@@ -49,7 +43,7 @@ class MockDataProvider(DataProvider):
         self.symbols = [f"600{str(i).zfill(3)}.SH" for i in range(1, n_symbols + 1)]
 
         np.random.seed(42)
-        dates = pd.date_range(end=datetime.now(), periods=n_days, freq='B')
+        dates = pd.date_range(end=datetime.now(), periods=n_days, freq="B")
 
         self.price_data = {}
         for symbol in self.symbols:
@@ -57,48 +51,52 @@ class MockDataProvider(DataProvider):
             prices = 100 * np.exp(np.cumsum(returns))
             prices = np.clip(prices, 10, 500)
 
-            self.price_data[symbol] = pd.DataFrame({
-                'timestamp': dates,
-                'symbol': symbol,
-                'open': prices * (1 + np.random.randn(n_days) * 0.005),
-                'high': prices * (1 + np.abs(np.random.randn(n_days) * 0.01)),
-                'low': prices * (1 - np.abs(np.random.randn(n_days) * 0.01)),
-                'close': prices,
-                'volume': np.random.randint(1000000, 10000000, n_days).astype(float),
-            })
+            self.price_data[symbol] = pd.DataFrame(
+                {
+                    "timestamp": dates,
+                    "symbol": symbol,
+                    "open": prices * (1 + np.random.randn(n_days) * 0.005),
+                    "high": prices * (1 + np.abs(np.random.randn(n_days) * 0.01)),
+                    "low": prices * (1 - np.abs(np.random.randn(n_days) * 0.01)),
+                    "close": prices,
+                    "volume": np.random.randint(1000000, 10000000, n_days).astype(float),
+                }
+            )
 
     def get_prices(self, symbols, start, end, timeframe=TimeFrame.DAY_1):
         dfs = []
         for symbol in symbols:
             if symbol in self.price_data:
                 df = self.price_data[symbol].copy()
-                df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
+                df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
                 dfs.append(df)
         if not dfs:
             return pd.DataFrame()
         result = pd.concat(dfs, ignore_index=True)
-        result = result.set_index(['symbol', 'timestamp'])
+        result = result.set_index(["symbol", "timestamp"])
         return result
 
     def get_latest_prices(self, symbols):
         result = {}
         for symbol in symbols:
             if symbol in self.price_data:
-                result[symbol] = float(self.price_data[symbol]['close'].iloc[-1])
+                result[symbol] = float(self.price_data[symbol]["close"].iloc[-1])
         return result
 
     def get_fundamentals(self, symbols, as_of=None):
         fundamentals = []
         for symbol in symbols:
-            price = self.price_data[symbol]['close'].iloc[-1] if symbol in self.price_data else 100
-            fundamentals.append(Fundamentals(
-                symbol=symbol,
-                timestamp=as_of or datetime.now(),
-                pe_ratio=np.random.uniform(10, 40),
-                pb_ratio=np.random.uniform(1, 5),
-                roe=np.random.uniform(0.05, 0.25),
-                eps=price / np.random.uniform(10, 30),
-            ))
+            price = self.price_data[symbol]["close"].iloc[-1] if symbol in self.price_data else 100
+            fundamentals.append(
+                Fundamentals(
+                    symbol=symbol,
+                    timestamp=as_of or datetime.now(),
+                    pe_ratio=np.random.uniform(10, 40),
+                    pb_ratio=np.random.uniform(1, 5),
+                    roe=np.random.uniform(0.05, 0.25),
+                    eps=price / np.random.uniform(10, 30),
+                )
+            )
         return fundamentals
 
     def get_sentiment(self, symbols, start, end, source=None):
@@ -112,7 +110,7 @@ class MockDataProvider(DataProvider):
                 timestamp=datetime.now(),
                 score=np.random.randn() * 0.3,
                 confidence=0.8,
-                source='mock',
+                source="mock",
             )
         return result
 
@@ -149,7 +147,7 @@ class SimpleMomentumStrategy(SignalGenerator):
                     continue
 
                 returns = symbol_prices.pct_change().dropna()
-                momentum = (returns.iloc[-5:].mean() - returns.iloc[-20:].mean())
+                momentum = returns.iloc[-5:].mean() - returns.iloc[-20:].mean()
                 current_price = float(symbol_prices.iloc[-1])
 
                 if momentum > 0.005:

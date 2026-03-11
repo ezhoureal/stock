@@ -1,18 +1,18 @@
 """
 Simple test for mock broker without external dependencies
 """
-import sys
+
 import os
+import sys
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config_simple import Config
-from broker.base import Order, OrderType, OrderSide, OrderStatus
+from broker.base import Order, OrderSide, OrderStatus, OrderType
 from broker.mock import MockBroker
 from order.models import OrderRequest
 from position.tracker import PositionTracker
-from risk.controls import RiskManager, RiskLimit
+from risk.controls import RiskLimit, RiskManager
 
 
 def test_mock_broker():
@@ -24,13 +24,15 @@ def test_mock_broker():
     # Initialize components
     broker = MockBroker(initial_cash=1000000.0)
     position_tracker = PositionTracker()
-    risk_manager = RiskManager(RiskLimit(
-        max_position_size=10000,
-        max_total_position_value=500000,
-        max_positions=5,
-        max_daily_loss=10000,
-        stop_loss_percent=5.0,
-    ))
+    risk_manager = RiskManager(
+        RiskLimit(
+            max_position_size=10000,
+            max_total_position_value=500000,
+            max_positions=5,
+            max_daily_loss=10000,
+            stop_loss_percent=5.0,
+        )
+    )
 
     # Connect to broker
     print("\n1. Connecting to broker...")
@@ -39,21 +41,21 @@ def test_mock_broker():
 
     # Subscribe to market data
     print("\n2. Subscribing to market data...")
-    symbols = ['600519.SH', '000858.SZ', '600036.SH']
+    symbols = ["600519.SH", "000858.SZ", "600036.SH"]
     if broker.subscribe_market_data(symbols):
         print(f"   ✓ Subscribed to {len(symbols)} symbols")
 
     # Start trading day
-    account = broker.get_account_balance()
+    account = broker.get_full_account_balance()
     risk_manager.start_day(account.cash)
     print(f"\n3. Starting balance: ¥{account.cash:,.2f}")
 
     # Test order 1: Buy Moutai
     print("\n4. Test: Buy Moutai (600519.SH)")
-    price = broker.get_market_price('600519.SH')
+    price = broker.get_market_price("600519.SH")
 
     order = Order(
-        symbol='600519.SH',
+        symbol="600519.SH",
         side=OrderSide.BUY,
         order_type=OrderType.LIMIT,
         quantity=100,
@@ -68,17 +70,17 @@ def test_mock_broker():
     # Update position tracker
     if result.status == OrderStatus.FILLED:
         position_tracker.update_position(
-            '600519.SH',
+            "600519.SH",
             result.quantity,
             result.avg_fill_price,
         )
 
     # Test order 2: Buy Wuliangye
     print("\n5. Test: Buy Wuliangye (000858.SZ)")
-    price = broker.get_market_price('000858.SZ')
+    price = broker.get_market_price("000858.SZ")
 
     order = Order(
-        symbol='000858.SZ',
+        symbol="000858.SZ",
         side=OrderSide.BUY,
         order_type=OrderType.MARKET,
         quantity=200,
@@ -91,17 +93,17 @@ def test_mock_broker():
 
     if result.status == OrderStatus.FILLED:
         position_tracker.update_position(
-            '000858.SZ',
+            "000858.SZ",
             result.quantity,
             result.avg_fill_price,
         )
 
     # Test order 3: Buy Minsheng Bank
     print("\n6. Test: Buy Minsheng Bank (600036.SH)")
-    price = broker.get_market_price('600036.SH')
+    price = broker.get_market_price("600036.SH")
 
     order = Order(
-        symbol='600036.SH',
+        symbol="600036.SH",
         side=OrderSide.BUY,
         order_type=OrderType.MARKET,
         quantity=500,
@@ -114,7 +116,7 @@ def test_mock_broker():
 
     if result.status == OrderStatus.FILLED:
         position_tracker.update_position(
-            '600036.SH',
+            "600036.SH",
             result.quantity,
             result.avg_fill_price,
         )
@@ -131,8 +133,8 @@ def test_mock_broker():
 
     # Update prices and check P&L
     print("\n8. Updating prices...")
-    broker.set_market_price('600519.SH', broker.get_market_price('600519.SH') * 1.02)
-    broker.set_market_price('000858.SZ', broker.get_market_price('000858.SZ') * 0.98)
+    broker.set_market_price("600519.SH", broker.get_market_price("600519.SH") * 1.02)
+    broker.set_market_price("000858.SZ", broker.get_market_price("000858.SZ") * 0.98)
     print("   ✓ Moutai: +2%")
     print("   ✓ Wuliangye: -2%")
 
@@ -145,7 +147,7 @@ def test_mock_broker():
 
     # Check account
     print("\n10. Account Summary:")
-    account = broker.get_account_balance()
+    account = broker.get_full_account_balance()
     print(f"    Cash: ¥{account.cash:,.2f}")
     print(f"    Market Value: ¥{account.market_value:,.2f}")
     print(f"    Total Equity: ¥{account.total_equity:,.2f}")
@@ -173,11 +175,11 @@ def test_mock_broker():
 
     # Test: Exceed position limit
     order_request = OrderRequest(
-        symbol='600519.SH',
+        symbol="600519.SH",
         side=OrderSide.BUY,
         order_type=OrderType.LIMIT,
         quantity=20000,  # Exceeds limit
-        price=market_prices['600519.SH'],
+        price=market_prices["600519.SH"],
     )
 
     validation_error = risk_manager.validate_order_request(
@@ -190,15 +192,15 @@ def test_mock_broker():
     if validation_error:
         print(f"    ✓ Rejected (as expected): {validation_error.message}")
     else:
-        print(f"    ✗ Should have been rejected (position limit exceeded)")
+        print("    ✗ Should have been rejected (position limit exceeded)")
 
     # Test: Insufficient funds
     order_request = OrderRequest(
-        symbol='600519.SH',
+        symbol="600519.SH",
         side=OrderSide.BUY,
         order_type=OrderType.LIMIT,
         quantity=100000,  # Too expensive
-        price=market_prices['600519.SH'],
+        price=market_prices["600519.SH"],
     )
 
     validation_error = risk_manager.validate_order_request(
@@ -211,45 +213,45 @@ def test_mock_broker():
     if validation_error:
         print(f"    ✓ Rejected (as expected): {validation_error.message}")
     else:
-        print(f"    ✗ Should have been rejected (insufficient funds)")
+        print("    ✗ Should have been rejected (insufficient funds)")
 
     # Test: Invalid quantity
     order_request = OrderRequest(
-        symbol='600519.SH',
+        symbol="600519.SH",
         side=OrderSide.BUY,
         order_type=OrderType.LIMIT,
         quantity=-100,  # Invalid
-        price=market_prices['600519.SH'],
+        price=market_prices["600519.SH"],
     )
 
     validation_error = order_request.validate()
     if validation_error:
         print(f"    ✓ Rejected (as expected): {validation_error.message}")
     else:
-        print(f"    ✗ Should have been rejected (invalid quantity)")
+        print("    ✗ Should have been rejected (invalid quantity)")
 
     # Test order cancellation
     print("\n14. Test Order Cancellation:")
     order = Order(
-        symbol='600519.SH',
+        symbol="600519.SH",
         side=OrderSide.BUY,
         order_type=OrderType.LIMIT,
         quantity=100,
-        price=broker.get_market_price('600519.SH') * 0.9,  # Below market
+        price=broker.get_market_price("600519.SH") * 0.9,  # Below market
     )
     result = broker.place_order(order)
     print(f"    Placed order: {result.order_id}")
 
     if broker.cancel_order(result.order_id):
-        print(f"    ✓ Order cancelled")
+        print("    ✓ Order cancelled")
         updated_order = broker.get_order(result.order_id)
         print(f"    Status: {updated_order.status.value}")
     else:
-        print(f"    ✗ Failed to cancel order")
+        print("    ✗ Failed to cancel order")
 
     # Final summary
     print("\n15. Final Summary:")
-    account = broker.get_account_balance()
+    account = broker.get_full_account_balance()
     print(f"    Cash: ¥{account.cash:,.2f}")
     print(f"    Market Value: ¥{account.market_value:,.2f}")
     print(f"    Total Equity: ¥{account.total_equity:,.2f}")
@@ -266,5 +268,5 @@ def test_mock_broker():
     print("=" * 60)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_mock_broker()

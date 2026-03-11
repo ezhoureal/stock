@@ -6,22 +6,23 @@ Usage:
     python collect_historical_prices.py [--years 1]
 """
 
-import json
-import sys
 import argparse
+import json
 from datetime import datetime, timedelta
 
 # Load configuration
 CONFIG_PATH = "/home/zireael/trade/stocks/data/config.json"
 
+
 def load_config():
     """Load configuration from config.json"""
-    with open(CONFIG_PATH, 'r') as f:
+    with open(CONFIG_PATH) as f:
         return json.load(f)
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Collect historical price data for CSI 300 stocks')
-    parser.add_argument('--years', type=int, default=1, help='Number of years of historical data')
+    parser = argparse.ArgumentParser(description="Collect historical price data for CSI 300 stocks")
+    parser.add_argument("--years", type=int, default=1, help="Number of years of historical data")
     args = parser.parse_args()
 
     print("=" * 80)
@@ -39,8 +40,8 @@ def main():
         return False
 
     config = load_config()
-    db_path = config['database']['path']
-    primary_source = config['data_collection']['primary_source']
+    db_path = config["database"]["path"]
+    primary_source = config["data_collection"]["primary_source"]
     years = args.years
 
     print(f"Database path: {db_path}")
@@ -53,6 +54,7 @@ def main():
 
     try:
         import akshare as ak
+
         print("✓ Akshare imported")
     except ImportError:
         print("✗ Akshare not installed")
@@ -76,8 +78,8 @@ def main():
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365 * years)
 
-    start_date_str = start_date.strftime('%Y%m%d')
-    end_date_str = end_date.strftime('%Y%m%d')
+    start_date_str = start_date.strftime("%Y%m%d")
+    end_date_str = end_date.strftime("%Y%m%d")
 
     print(f"  Start date: {start_date_str}")
     print(f"  End date: {end_date_str}")
@@ -90,7 +92,7 @@ def main():
     error_stocks = []
 
     for i, (stock_id, name, akshare_code) in enumerate(stocks, 1):
-        print(f"\r  [{i}/{len(stocks)}] Fetching {stock_id} ({name})...", end='', flush=True)
+        print(f"\r  [{i}/{len(stocks)}] Fetching {stock_id} ({name})...", end="", flush=True)
 
         try:
             # Fetch historical data from Akshare
@@ -99,7 +101,7 @@ def main():
                 period="daily",
                 start_date=start_date_str,
                 end_date=end_date_str,
-                adjust=""  # No adjustment for raw prices
+                adjust="",  # No adjustment for raw prices
             )
 
             if df.empty:
@@ -109,33 +111,46 @@ def main():
             # Process data
             records = []
             for _, row in df.iterrows():
-                records.append({
-                    'stock_id': stock_id,
-                    'trade_date': pd.to_datetime(row['日期']).date(),
-                    'open': float(row['开盘']),
-                    'high': float(row['最高']),
-                    'low': float(row['最低']),
-                    'close': float(row['收盘']),
-                    'volume': int(row['成交量']),
-                    'amount': float(row['成交额']),
-                    'pct_chg': float(row['涨跌幅']),
-                    'adj_factor': 1.0,
-                    'data_source': primary_source
-                })
+                records.append(
+                    {
+                        "stock_id": stock_id,
+                        "trade_date": pd.to_datetime(row["日期"]).date(),
+                        "open": float(row["开盘"]),
+                        "high": float(row["最高"]),
+                        "low": float(row["最低"]),
+                        "close": float(row["收盘"]),
+                        "volume": int(row["成交量"]),
+                        "amount": float(row["成交额"]),
+                        "pct_chg": float(row["涨跌幅"]),
+                        "adj_factor": 1.0,
+                        "data_source": primary_source,
+                    }
+                )
 
             # Insert into database
             conn.execute("BEGIN TRANSACTION")
             for rec in records:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO daily_prices
                     (stock_id, trade_date, open, high, low, close, volume,
                      amount, pct_chg, adj_factor, data_source)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, [
-                    rec['stock_id'], rec['trade_date'], rec['open'], rec['high'],
-                    rec['low'], rec['close'], rec['volume'], rec['amount'],
-                    rec['pct_chg'], rec['adj_factor'], rec['data_source']
-                ])
+                """,
+                    [
+                        rec["stock_id"],
+                        rec["trade_date"],
+                        rec["open"],
+                        rec["high"],
+                        rec["low"],
+                        rec["close"],
+                        rec["volume"],
+                        rec["amount"],
+                        rec["pct_chg"],
+                        rec["adj_factor"],
+                        rec["data_source"],
+                    ],
+                )
             conn.execute("COMMIT")
 
             total_records += len(records)
@@ -159,7 +174,8 @@ def main():
 
     # Verify
     print("\nVerifying data...")
-    result = conn.execute("""
+    result = conn.execute(
+        """
         SELECT
             COUNT(DISTINCT stock_id) as stocks,
             COUNT(*) as records,
@@ -167,7 +183,9 @@ def main():
             MAX(trade_date) as last_date
         FROM daily_prices
         WHERE data_source = ?
-    """, [primary_source]).fetchone()
+    """,
+        [primary_source],
+    ).fetchone()
 
     print(f"  Unique stocks: {result[0]}")
     print(f"  Total records: {result[1]}")
@@ -180,6 +198,7 @@ def main():
 
     conn.close()
     return True
+
 
 if __name__ == "__main__":
     success = main()

@@ -5,15 +5,16 @@ Calculates intrinsic value and undervalued/overvalued scores for Chinese stocks
 based on fundamental metrics relative to sector medians.
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Optional, Tuple
-from dataclasses import dataclass
 
 
 @dataclass
 class ValuationConfig:
     """Configuration for valuation calculations"""
+
     # Metric weights
     pe_weight: float = 0.40
     pb_weight: float = 0.25
@@ -30,11 +31,12 @@ class ValuationConfig:
 @dataclass
 class ValuationMetrics:
     """Fundamental metrics for a stock"""
-    pe_ratio: float          # Price to Earnings
-    pb_ratio: float          # Price to Book
-    dividend_yield: float    # Annual dividend yield (0-1)
-    peg_ratio: Optional[float]  # PEG (PE / earnings growth rate)
-    eps: float               # Earnings per share
+
+    pe_ratio: float  # Price to Earnings
+    pb_ratio: float  # Price to Book
+    dividend_yield: float  # Annual dividend yield (0-1)
+    peg_ratio: float | None  # PEG (PE / earnings growth rate)
+    eps: float  # Earnings per share
     book_value_per_share: float
     annual_dividend: float
 
@@ -42,23 +44,25 @@ class ValuationMetrics:
 @dataclass
 class SectorMetrics:
     """Sector median metrics for comparison"""
+
     pe_ratio: float
     pb_ratio: float
     dividend_yield: float
-    peg_ratio: Optional[float]
+    peg_ratio: float | None
 
 
 @dataclass
 class ValuationScore:
     """Valuation analysis result"""
-    composite_score: float    # V score (higher = more undervalued)
+
+    composite_score: float  # V score (higher = more undervalued)
     interpretation: str
-    relative_pe: float        # (company / sector) - 1
+    relative_pe: float  # (company / sector) - 1
     relative_pb: float
-    dividend_diff: float     # company - sector
+    dividend_diff: float  # company - sector
     relative_peg: float
-    component_scores: Dict[str, float]
-    trend: Optional[float] = None  # V_trend if historical data available
+    component_scores: dict[str, float]
+    trend: float | None = None  # V_trend if historical data available
 
 
 class ValuationCalculator:
@@ -66,7 +70,7 @@ class ValuationCalculator:
     Calculates intrinsic value and valuation scores for Chinese stocks.
     """
 
-    def __init__(self, config: Optional[ValuationConfig] = None):
+    def __init__(self, config: ValuationConfig | None = None):
         """
         Initialize the valuation calculator.
 
@@ -76,10 +80,8 @@ class ValuationCalculator:
         self.config = config or ValuationConfig()
 
     def calculate_relative_metrics(
-        self,
-        company: ValuationMetrics,
-        sector: SectorMetrics
-    ) -> Tuple[float, float, float, float]:
+        self, company: ValuationMetrics, sector: SectorMetrics
+    ) -> tuple[float, float, float, float]:
         """
         Calculate company metrics relative to sector medians.
 
@@ -114,12 +116,8 @@ class ValuationCalculator:
         return relative_pe, relative_pb, dividend_diff, relative_peg
 
     def calculate_composite_score(
-        self,
-        relative_pe: float,
-        relative_pb: float,
-        dividend_diff: float,
-        relative_peg: float
-    ) -> Tuple[float, Dict[str, float]]:
+        self, relative_pe: float, relative_pb: float, dividend_diff: float, relative_peg: float
+    ) -> tuple[float, dict[str, float]]:
         """
         Calculate the composite valuation score (V).
 
@@ -144,7 +142,7 @@ class ValuationCalculator:
             "PE": pe_score,
             "PB": pb_score,
             "dividend": dividend_score,
-            "PEG": peg_score
+            "PEG": peg_score,
         }
 
         composite_score = sum(component_scores.values())
@@ -176,7 +174,7 @@ class ValuationCalculator:
         self,
         company: ValuationMetrics,
         sector: SectorMetrics,
-        historical_scores: Optional[pd.Series] = None
+        historical_scores: pd.Series | None = None,
     ) -> ValuationScore:
         """
         Calculate full valuation analysis for a stock.
@@ -190,14 +188,10 @@ class ValuationCalculator:
             ValuationScore with full analysis
         """
         # Calculate relative metrics
-        rel_pe, rel_pb, div_diff, rel_peg = self.calculate_relative_metrics(
-            company, sector
-        )
+        rel_pe, rel_pb, div_diff, rel_peg = self.calculate_relative_metrics(company, sector)
 
         # Calculate composite score
-        composite, components = self.calculate_composite_score(
-            rel_pe, rel_pb, div_diff, rel_peg
-        )
+        composite, components = self.calculate_composite_score(rel_pe, rel_pb, div_diff, rel_peg)
 
         # Interpret
         interpretation = self.interpret_score(composite)
@@ -215,13 +209,11 @@ class ValuationCalculator:
             dividend_diff=div_diff,
             relative_peg=rel_peg,
             component_scores=components,
-            trend=trend
+            trend=trend,
         )
 
     def batch_calculate(
-        self,
-        metrics_df: pd.DataFrame,
-        sector_medians: pd.DataFrame
+        self, metrics_df: pd.DataFrame, sector_medians: pd.DataFrame
     ) -> pd.DataFrame:
         """
         Calculate valuation for multiple stocks.
@@ -238,53 +230,52 @@ class ValuationCalculator:
         results = []
 
         for _, row in metrics_df.iterrows():
-            symbol = row['symbol']
+            symbol = row["symbol"]
 
             # Get sector median
-            sector_data = sector_medians[sector_medians['sector'] == row['sector']]
+            sector_data = sector_medians[sector_medians["sector"] == row["sector"]]
             if sector_data.empty:
                 continue
 
             sector_row = sector_data.iloc[0]
 
             company = ValuationMetrics(
-                pe_ratio=row['pe_ratio'],
-                pb_ratio=row['pb_ratio'],
-                dividend_yield=row['dividend_yield'],
-                peg_ratio=row.get('peg_ratio', None),
-                eps=row['eps'],
-                book_value_per_share=row['book_value_per_share'],
-                annual_dividend=row['annual_dividend']
+                pe_ratio=row["pe_ratio"],
+                pb_ratio=row["pb_ratio"],
+                dividend_yield=row["dividend_yield"],
+                peg_ratio=row.get("peg_ratio", None),
+                eps=row["eps"],
+                book_value_per_share=row["book_value_per_share"],
+                annual_dividend=row["annual_dividend"],
             )
 
             sector = SectorMetrics(
-                pe_ratio=sector_row['pe_ratio'],
-                pb_ratio=sector_row['pb_ratio'],
-                dividend_yield=sector_row['dividend_yield'],
-                peg_ratio=sector_row.get('peg_ratio', None)
+                pe_ratio=sector_row["pe_ratio"],
+                pb_ratio=sector_row["pb_ratio"],
+                dividend_yield=sector_row["dividend_yield"],
+                peg_ratio=sector_row.get("peg_ratio", None),
             )
 
             valuation = self.calculate_valuation(company, sector)
 
-            results.append({
-                'symbol': symbol,
-                'V': valuation.composite_score,
-                'V_interpretation': valuation.interpretation,
-                'V_trend': valuation.trend,
-                'relative_pe': valuation.relative_pe,
-                'relative_pb': valuation.relative_pb,
-                'dividend_diff': valuation.dividend_diff,
-                'relative_peg': valuation.relative_peg
-            })
+            results.append(
+                {
+                    "symbol": symbol,
+                    "V": valuation.composite_score,
+                    "V_interpretation": valuation.interpretation,
+                    "V_trend": valuation.trend,
+                    "relative_pe": valuation.relative_pe,
+                    "relative_pb": valuation.relative_pb,
+                    "dividend_diff": valuation.dividend_diff,
+                    "relative_peg": valuation.relative_peg,
+                }
+            )
 
         return pd.DataFrame(results)
 
     def calculate_intrinsic_value(
-        self,
-        company: ValuationMetrics,
-        sector: SectorMetrics,
-        risk_free_rate: float = 0.03
-    ) -> Dict[str, float]:
+        self, company: ValuationMetrics, sector: SectorMetrics, risk_free_rate: float = 0.03
+    ) -> dict[str, float]:
         """
         Calculate intrinsic value using multiple methods.
 
@@ -322,7 +313,9 @@ class ValuationCalculator:
         if company.dividend_yield > 0 and risk_free_rate > 0.03:
             growth_rate = 0.03  # Conservative assumption
             if risk_free_rate > growth_rate:
-                intrinsic_gordon = company.annual_dividend * (1 + growth_rate) / (risk_free_rate - growth_rate)
+                intrinsic_gordon = (
+                    company.annual_dividend * (1 + growth_rate) / (risk_free_rate - growth_rate)
+                )
             else:
                 intrinsic_gordon = None
         else:
@@ -350,7 +343,7 @@ class ValuationCalculator:
             "intrinsic_pb": intrinsic_pb,
             "intrinsic_gordon": intrinsic_gordon,
             "intrinsic_value": intrinsic_value,
-            "discount_to_intrinsic": discount
+            "discount_to_intrinsic": discount,
         }
 
 
@@ -366,7 +359,7 @@ def load_config(config_path: str) -> ValuationConfig:
     """
     import json
 
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         config_dict = json.load(f)
 
     return ValuationConfig(**config_dict)
@@ -379,31 +372,26 @@ if __name__ == "__main__":
 
     # Example: A technology company that looks undervalued
     company = ValuationMetrics(
-        pe_ratio=15.0,      # Below sector median of 25
-        pb_ratio=2.5,       # At sector median
+        pe_ratio=15.0,  # Below sector median of 25
+        pb_ratio=2.5,  # At sector median
         dividend_yield=0.02,  # 2% vs sector 1.5%
-        peg_ratio=1.2,      # Below sector median of 1.8
+        peg_ratio=1.2,  # Below sector median of 1.8
         eps=2.0,
         book_value_per_share=8.0,
-        annual_dividend=0.4
+        annual_dividend=0.4,
     )
 
-    sector = SectorMetrics(
-        pe_ratio=25.0,
-        pb_ratio=2.5,
-        dividend_yield=0.015,
-        peg_ratio=1.8
-    )
+    sector = SectorMetrics(pe_ratio=25.0, pb_ratio=2.5, dividend_yield=0.015, peg_ratio=1.8)
 
     valuation = calculator.calculate_valuation(company, sector)
 
     print("=== Valuation Analysis ===")
     print(f"Composite Score (V): {valuation.composite_score:.3f}")
     print(f"Interpretation: {valuation.interpretation}")
-    print(f"\nComponent Scores:")
+    print("\nComponent Scores:")
     for name, score in valuation.component_scores.items():
         print(f"  {name}: {score:.3f}")
-    print(f"\nRelative Metrics:")
+    print("\nRelative Metrics:")
     print(f"  PE: {valuation.relative_pe:.2%}")
     print(f"  PB: {valuation.relative_pb:.2%}")
     print(f"  Dividend: {valuation.dividend_diff:.2%}")
@@ -411,8 +399,8 @@ if __name__ == "__main__":
 
     # Intrinsic value calculation
     intrinsic = calculator.calculate_intrinsic_value(company, sector)
-    print(f"\n=== Intrinsic Value ===")
-    if intrinsic['intrinsic_value']:
+    print("\n=== Intrinsic Value ===")
+    if intrinsic["intrinsic_value"]:
         print(f"Intrinsic Value: ¥{intrinsic['intrinsic_value']:.2f}")
         print(f"Discount to Intrinsic: {intrinsic['discount_to_intrinsic']:.2%}")
     else:

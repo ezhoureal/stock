@@ -9,28 +9,26 @@ Main entry point for running the trading system. Coordinates all components:
 - Backtesting
 """
 
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
-from dataclasses import dataclass
 import logging
-from pathlib import Path
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
 
-from .types import TradingSignal, PortfolioSignal, SignalType
-from .interfaces import (
-    DataProvider,
-    SignalGenerator,
-    ExecutionClient,
-    BacktestResult,
-)
-from .config import SystemConfig, BacktestConfig
-from .signal_router import SignalRouterImpl
 from backtest.engine import BacktestEngineImpl
 from data.providers.duckdb_provider import DuckDBDataProvider
+
+from .config import SystemConfig
+from .interfaces import (
+    BacktestResult,
+    DataProvider,
+    ExecutionClient,
+    SignalGenerator,
+)
+from .signal_router import SignalRouterImpl
 from .strategy_adapters import (
-    SentimentArbAdapter,
-    ContrarianAdapter,
     create_strategy_adapters,
 )
+from .types import PortfolioSignal, SignalType, TradingSignal
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +36,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SystemState:
     """Current state of the trading system"""
-    last_run: Optional[datetime] = None
-    active_positions: Dict[str, Any] = None
-    pending_orders: Dict[str, Any] = None
+
+    last_run: datetime | None = None
+    active_positions: dict[str, Any] = None
+    pending_orders: dict[str, Any] = None
     daily_pnl: float = 0.0
     total_equity: float = 0.0
 
@@ -58,8 +57,8 @@ class TradingSystem:
 
     def __init__(
         self,
-        config: Optional[SystemConfig] = None,
-        config_path: Optional[str] = None,
+        config: SystemConfig | None = None,
+        config_path: str | None = None,
     ):
         """
         Initialize trading system.
@@ -74,10 +73,10 @@ class TradingSystem:
             self.config = config or SystemConfig()
 
         # Initialize components
-        self._data_provider: Optional[DataProvider] = None
-        self._strategies: Dict[str, SignalGenerator] = {}
-        self._router: Optional[SignalRouterImpl] = None
-        self._execution_client: Optional[ExecutionClient] = None
+        self._data_provider: DataProvider | None = None
+        self._strategies: dict[str, SignalGenerator] = {}
+        self._router: SignalRouterImpl | None = None
+        self._execution_client: ExecutionClient | None = None
         self._state = SystemState()
 
         self._initialized = False
@@ -112,8 +111,8 @@ class TradingSystem:
 
     def run_once(
         self,
-        symbols: Optional[List[str]] = None,
-        as_of: Optional[datetime] = None,
+        symbols: list[str] | None = None,
+        as_of: datetime | None = None,
     ) -> PortfolioSignal:
         """
         Run one iteration of signal generation.
@@ -132,9 +131,7 @@ class TradingSystem:
 
         # Get universe if no symbols specified
         if symbols is None:
-            symbols = self._data_provider.get_universe(
-                self.config.data.default_universe
-            )
+            symbols = self._data_provider.get_universe(self.config.data.default_universe)
 
         if not symbols:
             logger.warning("No symbols to analyze")
@@ -159,11 +156,11 @@ class TradingSystem:
 
     def run_backtest(
         self,
-        strategy_name: Optional[str] = None,
-        symbols: Optional[List[str]] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        initial_capital: Optional[float] = None,
+        strategy_name: str | None = None,
+        symbols: list[str] | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        initial_capital: float | None = None,
     ) -> BacktestResult:
         """
         Run backtest for a strategy.
@@ -188,9 +185,7 @@ class TradingSystem:
 
         # Get universe
         if symbols is None:
-            symbols = self._data_provider.get_universe(
-                self.config.data.default_universe
-            )
+            symbols = self._data_provider.get_universe(self.config.data.default_universe)
 
         # Get strategy
         if strategy_name:
@@ -232,7 +227,7 @@ class TradingSystem:
         self,
         portfolio: PortfolioSignal,
         dry_run: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Execute signals through the broker.
 
@@ -287,7 +282,7 @@ class TradingSystem:
 
         return results
 
-    def get_system_status(self) -> Dict[str, Any]:
+    def get_system_status(self) -> dict[str, Any]:
         """
         Get current system status.
 
@@ -299,8 +294,7 @@ class TradingSystem:
             "strategies": list(self._strategies.keys()),
             "last_run": self._state.last_run.isoformat() if self._state.last_run else None,
             "broker_connected": (
-                self._execution_client.is_connected()
-                if self._execution_client else False
+                self._execution_client.is_connected() if self._execution_client else False
             ),
         }
 
@@ -336,7 +330,7 @@ class TradingSystem:
 
         # Close data provider
         if self._data_provider:
-            if hasattr(self._data_provider, 'close'):
+            if hasattr(self._data_provider, "close"):
                 self._data_provider.close()
 
         # Disconnect broker
@@ -356,7 +350,7 @@ class CombinedStrategy(SignalGenerator):
     def __init__(
         self,
         router: SignalRouterImpl,
-        strategies: Dict[str, SignalGenerator],
+        strategies: dict[str, SignalGenerator],
     ):
         self._router = router
         self._strategies = strategies
@@ -371,30 +365,31 @@ class CombinedStrategy(SignalGenerator):
 
     def generate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         """Generate signals using the router"""
         portfolio = self._router.aggregate_signals(symbols, as_of, data_provider)
         return portfolio.signals
 
-    def update(self, new_data: Dict[str, Any]) -> None:
+    def update(self, new_data: dict[str, Any]) -> None:
         pass
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {}
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         pass
 
-    def get_required_data(self) -> List[str]:
+    def get_required_data(self) -> list[str]:
         return ["prices", "fundamentals", "sentiment"]
 
 
 # Convenience functions
 
-def create_system(config_path: Optional[str] = None) -> TradingSystem:
+
+def create_system(config_path: str | None = None) -> TradingSystem:
     """
     Create and initialize a trading system.
 
@@ -411,7 +406,7 @@ def create_system(config_path: Optional[str] = None) -> TradingSystem:
 
 def quick_backtest(
     strategy_name: str = "sentiment_arbitrage",
-    symbols: Optional[List[str]] = None,
+    symbols: list[str] | None = None,
     days: int = 365,
     initial_capital: float = 1000000.0,
 ) -> BacktestResult:

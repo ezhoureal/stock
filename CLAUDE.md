@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Chinese stock trading system with multiple strategies and live trading infrastructure. The codebase consists of four independent modules that can operate separately but share data infrastructure.
+A Chinese stock trading system with multiple strategies and live trading infrastructure. The codebase consists of independent modules that can operate separately but share data infrastructure through the `common` module.
 
 ## Commands
 
@@ -21,10 +21,10 @@ uv venv
 
 # Install with specific dependency groups
 uv pip install -e ".[data,sentiment,broker,dev]"  # All optional deps
-uv pip install -e ".[data]"                    # Data pipeline only
-uv pip install -e ".[sentiment]"                # Sentiment arbitrage only
-uv pip install -e ".[broker]"                 # Broker integration only
-uv pip install -e ".[dev]"                   # Development tools only
+uv pip install -e ".[data]"                       # Data pipeline only
+uv pip install -e ".[sentiment]"                  # Sentiment arbitrage only
+uv pip install -e ".[broker]"                     # Broker integration only
+uv pip install -e ".[dev]"                        # Development tools only
 
 # Install everything (core + all optional)
 uv pip install -e ".[all]"
@@ -32,19 +32,14 @@ uv pip install -e ".[all]"
 
 ### Running the System
 
-All commands should be run from the project root:
+All commands should be run from the project root unless otherwise noted:
 
-**Sentiment Arbitrage System:**
+**Sentiment Strategy (Contrarian Trading):**
 ```bash
-uv run python sentiment_arbitrage/main.py                              # Run demo with synthetic data
-uv run python sentiment_arbitrage/tests/test_framework.py  # Run tests
-```
-
-**Strategy Module (Contrarian Trading):**
-```bash
-uv run python strategy/valuation.py    # Test valuation calculator
-uv run python strategy/sentiment.py      # Test sentiment analyzer
-uv run python strategy/signals.py        # Test signal generator
+uv run python sentiment_strategy/valuation.py    # Test valuation calculator
+uv run python sentiment_strategy/sentiment.py    # Test sentiment analyzer
+uv run python sentiment_strategy/signals.py      # Test signal generator
+uv run python sentiment_strategy/example.py      # Full demo
 ```
 
 **Data Pipeline:**
@@ -55,23 +50,38 @@ uv run python data/collect_historical_prices.py     # Collect price data
 uv run python data/collect_historical_prices.py -- --years 3  # Extended history
 ```
 
-**Broker/Live Trading:**
+**Broker/Live Trading (run from broker/python/):**
 ```bash
-uv run python live/broker/python/main.py --paper-trading  # Paper trading mode
-uv run python live/broker/python/test_simple.py           # Mock broker test
+cd broker/python
+uv run python test_simple.py           # Mock broker test
+uv run python main.py --paper-trading  # Paper trading mode
+```
+
+**Examples:**
+```bash
+uv run python examples/run_trading_system.py      # Full system demo
+uv run python examples/test_system_mock.py        # Mock system test
+uv run python examples/test_broker_integration.py # Broker integration test
 ```
 
 ### Development
 
 ```bash
-# Run tests
-uv run pytest
+# Run all tests (ignore GPU-dependent tests on machines without CUDA)
+uv run pytest --ignore=high_freq_sentiment
 
-# Format code
-uv run ruff check .
-uv run ruff format .
+# Run specific test file
+uv run pytest broker/python/test_simple.py
 
-# Lint code
+# Run specific test function
+uv run pytest examples/test_system_mock.py::test_trading_system_mock -v
+
+# Lint and format code (REQUIRED before commits)
+uv run ruff check .           # Check for issues
+uv run ruff check --fix .     # Auto-fix issues
+uv run ruff format .          # Format code
+
+# Alternative linter
 uv run flake8 .
 ```
 
@@ -79,71 +89,141 @@ uv run flake8 .
 
 ```
 stock/
-├── sentiment_arbitrage/    # GPU-optimized vectorized sentiment arbitrage (500+ stocks)
-│   ├── src/
-│   │   ├── kalman_filter.py       # Square-root Kalman filter for state estimation
-│   │   ├── z_scoring.py           # Vectorized z-score calculators (rolling/exp/cross-sectional)
-│   │   ├── echo_chamber.py        # Orthogonalization to remove market-wide effects
-│   │   ├── signal_generation.py   # Entry/exit signals with risk management
-│   │   └── sentiment_extraction.py # Distil-FinBERT + Triton integration
-│   └── main.py                    # Main integration module
+├── common/                    # Shared infrastructure (core module)
+│   ├── types.py               # Core data types (Signal, Position, Order, Trade, etc.)
+│   ├── interfaces.py          # Abstract interfaces (DataProvider, SignalGenerator, etc.)
+│   ├── config.py              # Configuration dataclasses
+│   ├── signal_router.py       # Routes signals to execution
+│   ├── strategy_adapters.py   # Adapters for different strategies
+│   └── orchestrator.py        # TradingSystem class, quick_backtest helper
 │
-├── strategy/               # Contrarian strategy (sentiment + fundamental valuation)
-│   ├── valuation.py        # Intrinsic value calculator (P/E, P/B, PEG, dividend)
-│   ├── sentiment.py        # Multi-source sentiment aggregation (news, social, search)
-│   └── signals.py          # Signal generator combining sentiment + valuation
+├── sentiment_strategy/        # Contrarian strategy (sentiment + fundamental valuation)
+│   ├── valuation.py           # Intrinsic value calculator (P/E, P/B, PEG, dividend)
+│   ├── sentiment.py           # Multi-source sentiment aggregation
+│   ├── signals.py             # Signal generator combining sentiment + valuation
+│   ├── example.py             # Demo script
+│   └── config.json            # Strategy configuration
 │
-├── data/                   # Data collection pipeline (DuckDB storage)
-│   ├── init_db.py          # Database schema initialization
-│   ├── collect_csi300.py   # CSI 300 constituent collection (Akshare)
-│   └── collect_historical_prices.py  # Historical price data (Baostock)
+├── backtest/                  # Backtesting engine
+│   └── engine.py              # BacktestEngineImpl with realistic execution simulation
 │
-└── live/broker/            # Live trading infrastructure
-    └── python/
-        ├── broker/         # Broker abstraction (Futu API + mock for testing)
-        ├── order/          # Order management with state machines
-        ├── position/       # Position tracking and P&L
-        └── risk/           # Risk controls and position limits
+├── data/                      # Data collection pipeline
+│   ├── init_db.py             # DuckDB schema initialization
+│   ├── collect_csi300.py      # CSI 300 constituent collection
+│   ├── collect_historical_prices.py  # Historical price data
+│   ├── collect_sentiment.py   # Sentiment data collection
+│   └── providers/             # Data providers (DuckDB, etc.)
+│
+├── broker/                    # Live trading infrastructure
+│   ├── .env                   # Broker configuration (copy from .env.example)
+│   └── python/
+│       ├── broker/            # Broker abstraction (mock + Futu API)
+│       │   ├── base.py        # Base broker interface
+│       │   └── mock.py        # Mock broker for testing
+│       ├── order/             # Order management and models
+│       ├── position/          # Position tracking and P&L
+│       ├── risk/              # Risk controls and position limits
+│       ├── main.py            # Entry point for paper trading
+│       └── test_simple.py     # Mock broker test
+│
+├── high_freq_sentiment/       # High-frequency sentiment processing
+├── examples/                  # Usage examples and integration tests
+└── config/                    # Global configuration files
 ```
 
 ## Key Architectural Patterns
 
-### Sentiment Arbitrage System
-Multi-layer pipeline: Data Ingestion → Sentiment Extraction (Distil-FinBERT/Triton) → State Estimation (Kalman Filter) → Signal Processing (Z-Scoring + Echo Chamber Elimination) → Signal Generation → Execution
+### Common Module (Core)
+The `common` module provides shared infrastructure:
+- **Types**: `TradingSignal`, `Position`, `Order`, `Trade`, `Bar`, `SignalType`
+- **Interfaces**: `DataProvider`, `SignalGenerator`, `ExecutionClient`, `BacktestEngine`
+- **TradingSystem**: Unified entry point via `common.TradingSystem` or `common.quick_backtest()`
 
-Mathematical model: `P_t = β * S_t + ε` where β is estimated via Kalman filter. Uses CuPy for GPU acceleration. Performance target: <100ms end-to-end latency.
+```python
+from common import TradingSystem, quick_backtest
 
-### Strategy Module (Contrarian)
+# Create and run the system
+system = TradingSystem()
+system.initialize()
+portfolio = system.run_once()
+
+# Run a quick backtest
+result = quick_backtest(strategy_name="sentiment_arbitrage", days=365)
+```
+
+### Sentiment Strategy (Contrarian)
 - **BUY**: Bearish sentiment (< -1.5) + Undervalued fundamentals (V > +0.10)
 - **SELL**: Bullish sentiment (> +1.5) + Overvalued fundamentals (V < -0.10)
 - Risk controls: 8% stop-loss, 15% take-profit, max 5% position size
 
-### Data Layer
-DuckDB for analytics-optimized storage. Primary data sources: Akshare (free, scraping-based) and Baostock (free, API-based). Universe: CSI 300.
+### Backtest Engine
+Realistic execution simulation with:
+- Multiple fill models (next_open, close, vwap)
+- Cost modeling (commission, slippage, stamp duty for China A-shares)
+- Performance metrics (Sharpe, drawdown, win rate)
 
 ### Broker Integration
-Futu OpenAPI recommended. Broker abstraction layer allows mock testing. Paper trading environment available.
+Broker abstraction layer with mock for testing. Run from `broker/python/` directory:
+```bash
+cd broker/python
+uv run python main.py --paper-trading
+```
 
 ## Configuration
 
 Each module has its own config:
-- `sentiment_arbitrage/configs/default_config.json` - Kalman parameters, z-score thresholds, signal thresholds
-- `strategy/config.json` - Sentiment weights, valuation weights, risk limits
+- `sentiment_strategy/config.json` - Sentiment weights, valuation weights, risk limits
 - `data/config.json` - Data source settings
-- `live/broker/.env.example` - Broker connection, risk limits (copy to `.env`)
+- `broker/.env` - Broker connection, risk limits (copy from `.env.example`)
 
 ## Environment Variables
 
-For live trading, copy `live/broker/.env.example` to `.env`:
-- `BROKER_TYPE=futu`
+For live trading with Futu, configure `broker/.env`:
+- `BROKER_TYPE=futu` or `mock`
 - `PAPER_TRADING=true` (for testing)
-- `FUTU_HOST/PORT` - OpenD gateway connection
+- `FUTU_HOST/PORT` - OpenD gateway connection (default: 127.0.0.1:11111)
 - Risk limits: `MAX_POSITION_SIZE`, `MAX_DAILY_LOSS`, `STOP_LOSS_PERCENT`
 
-## Python Version
+## Coding Guidelines
 
+### Code Quality (REQUIRED)
+Always run these before committing Python code:
+
+```bash
+# Fix linting issues and format
+uv run ruff check --fix .
+uv run ruff format .
+
+# Run tests to verify changes
+uv run pytest
+```
+
+### Ruff Configuration
+Project uses ruff with settings in `pyproject.toml`:
+- Line length: 100
+- Target: Python 3.13
+- Enabled rules: E, F, W, I, N, UP, B (pycodestyle, pyflakes, warnings, isort, naming, upgrade, bugbear)
+
+### Python Version
 Python 3.13 (specified in `.python-version`)
+
+### Type Hints
+Use modern Python 3.13 type hints:
+```python
+# Prefer
+def func(x: int | None) -> list[str]:
+
+# Over
+def func(x: Optional[int]) -> List[str]:
+```
+
+### Import Style
+Use absolute imports from package root:
+```python
+from common.types import TradingSignal, Position
+from sentiment_strategy.signals import SignalGenerator
+```
 
 ## GPU Requirements
 
-The `sentiment_arbitrage` module requires NVIDIA GPU with CUDA 12.x (uses CuPy). Install appropriate CuPy version for your CUDA/ROCm setup.
+The `high_freq_sentiment` module requires NVIDIA GPU with CUDA 12.x (uses CuPy). Install appropriate CuPy version for your CUDA setup.

@@ -1,9 +1,10 @@
 """
 Configuration for Broker Integration System
 """
+
 import os
-from typing import Optional
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,6 +14,7 @@ load_dotenv()
 @dataclass
 class BrokerConfig:
     """Broker configuration"""
+
     broker_type: str = os.getenv("BROKER_TYPE", "futu")  # 'futu', 'mock', etc.
     host: str = os.getenv("FUTU_HOST", "127.0.0.1")
     port: int = int(os.getenv("FUTU_PORT", "11111"))
@@ -23,6 +25,7 @@ class BrokerConfig:
 @dataclass
 class RiskConfig:
     """Risk control configuration"""
+
     max_position_size: int = int(os.getenv("MAX_POSITION_SIZE", "10000"))
     max_total_position_value: float = float(os.getenv("MAX_TOTAL_POSITION_VALUE", "1000000"))
     max_positions: int = int(os.getenv("MAX_POSITIONS", "10"))
@@ -33,6 +36,7 @@ class RiskConfig:
 @dataclass
 class OrderConfig:
     """Order configuration"""
+
     default_order_type: str = os.getenv("DEFAULT_ORDER_TYPE", "limit")
     slippage_tolerance: float = float(os.getenv("SLIPPAGE_TOLERANCE", "0.01"))
     order_timeout_seconds: int = int(os.getenv("ORDER_TIMEOUT_SECONDS", "300"))
@@ -41,6 +45,7 @@ class OrderConfig:
 @dataclass
 class LoggingConfig:
     """Logging configuration"""
+
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
     log_file: str = os.getenv("LOG_FILE", "broker.log")
     log_to_console: bool = os.getenv("LOG_TO_CONSOLE", "true").lower() == "true"
@@ -48,6 +53,7 @@ class LoggingConfig:
 
 class Config:
     """Main configuration class"""
+
     broker: BrokerConfig = BrokerConfig()
     risk: RiskConfig = RiskConfig()
     order: OrderConfig = OrderConfig()

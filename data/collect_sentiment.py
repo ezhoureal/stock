@@ -9,41 +9,42 @@ Usage:
     python collect_sentiment.py --source all --days 7
 """
 
-import sys
-import os
+import hashlib
 import json
 import logging
-import time
-import hashlib
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Set
-import traceback
 import random
+import sys
+import time
+import traceback
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler('/home/zireael/trade/stocks/data/logs/sentiment_collection.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.FileHandler("/home/zireael/trade/stocks/data/logs/sentiment_collection.log"),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 logger = logging.getLogger(__name__)
 
 
 class SentimentCollectionError(Exception):
     """Base exception for sentiment collection errors"""
+
     pass
 
 
 class RateLimitError(SentimentCollectionError):
     """Rate limit hit on API"""
+
     pass
 
 
 class DataQualityError(SentimentCollectionError):
     """Data quality issue detected"""
+
     pass
 
 
@@ -55,9 +56,9 @@ class NewsArticle:
         title: str,
         url: str,
         publish_time: datetime,
-        content: Optional[str] = None,
-        source: str = '',
-        stock_symbols: Optional[List[str]] = None
+        content: str | None = None,
+        source: str = "",
+        stock_symbols: list[str] | None = None,
     ):
         self.title = title
         self.url = url
@@ -71,12 +72,12 @@ class NewsArticle:
 
     def to_dict(self):
         return {
-            'title': self.title,
-            'url': self.url,
-            'publish_time': self.publish_time.isoformat(),
-            'content': self.content,
-            'source': self.source,
-            'stock_symbols': ','.join(self.stock_symbols)
+            "title": self.title,
+            "url": self.url,
+            "publish_time": self.publish_time.isoformat(),
+            "content": self.content,
+            "source": self.source,
+            "stock_symbols": ",".join(self.stock_symbols),
         }
 
 
@@ -93,7 +94,7 @@ class SentimentCollector:
             config_path: Path to configuration file
         """
         self.config = self._load_config(config_path)
-        self.db_path = self.config['database']['path']
+        self.db_path = self.config["database"]["path"]
         self.logger = logger
 
         # HTTP session for requests
@@ -116,17 +117,26 @@ class SentimentCollector:
         self.min_content_length = 50
         self.max_content_length = 100000
         self.spam_keywords = [
-            '广告', '推广', 'AD', '赞助', 'sponsored', 'advertising',
-            '点击', '下载', '安装', '立即购买', '免费领取'
+            "广告",
+            "推广",
+            "AD",
+            "赞助",
+            "sponsored",
+            "advertising",
+            "点击",
+            "下载",
+            "安装",
+            "立即购买",
+            "免费领取",
         ]
 
         # Track processed URLs to avoid duplicates
-        self.processed_urls: Set[str] = set()
+        self.processed_urls: set[str] = set()
 
-    def _load_config(self, config_path: str) -> Dict:
+    def _load_config(self, config_path: str) -> dict:
         """Load configuration from JSON file"""
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 return json.load(f)
         except Exception as e:
             self.logger.error(f"Failed to load config: {e}")
@@ -136,15 +146,16 @@ class SentimentCollector:
         """Initialize HTTP session with headers"""
         try:
             import requests
+
             self.session = requests.Session()
 
             # Set user agent to mimic browser
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive',
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate",
+                "Connection": "keep-alive",
             }
             self.session.headers.update(headers)
 
@@ -180,7 +191,9 @@ class SentimentCollector:
             try:
                 return func(*args, **kwargs)
             except RateLimitError as e:
-                self.logger.warning(f"Rate limit hit (attempt {attempt + 1}/{self.max_retries}): {e}")
+                self.logger.warning(
+                    f"Rate limit hit (attempt {attempt + 1}/{self.max_retries}): {e}"
+                )
                 if attempt < self.max_retries - 1:
                     self.logger.info(f"Waiting {delay}s before retry...")
                     time.sleep(delay)
@@ -224,7 +237,7 @@ class SentimentCollector:
 
         return True
 
-    def _extract_stock_symbols(self, text: str) -> List[str]:
+    def _extract_stock_symbols(self, text: str) -> list[str]:
         """
         Extract stock symbols from text (e.g., "贵州茅台(600519)").
 
@@ -237,13 +250,13 @@ class SentimentCollector:
         import re
 
         # Pattern: 6 digits, possibly in parentheses
-        pattern = r'(\d{6})'
+        pattern = r"(\d{6})"
         matches = re.findall(pattern, text)
 
         # Filter valid stock codes (starts with 6 for SH, 0/3 for SZ)
         symbols = []
         for match in matches:
-            if match.startswith('6') or match.startswith('0') or match.startswith('3'):
+            if match.startswith("6") or match.startswith("0") or match.startswith("3"):
                 if match not in symbols:
                     symbols.append(match)
 
@@ -253,16 +266,13 @@ class SentimentCollector:
         """Connect to DuckDB database"""
         try:
             import duckdb
+
             conn = duckdb.connect(self.db_path)
             return conn
         except Exception as e:
             raise SentimentCollectionError(f"Database connection failed: {e}")
 
-    def fetch_eastmoney_news(
-        self,
-        days: int = 7,
-        max_articles: int = 1000
-    ) -> List[NewsArticle]:
+    def fetch_eastmoney_news(self, days: int = 7, max_articles: int = 1000) -> list[NewsArticle]:
         """
         Fetch news from Eastmoney (东方财富网).
 
@@ -279,8 +289,8 @@ class SentimentCollector:
 
         try:
             # Eastmoney news API
-            start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
-            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+            end_date = datetime.now().strftime("%Y%m%d")
 
             # Multiple pages
             page = 1
@@ -289,14 +299,14 @@ class SentimentCollector:
             while len(articles) < max_articles:
                 self._rate_limit()
 
-                url = f"http://data.eastmoney.com/notices/getdata.ashx"
+                url = "http://data.eastmoney.com/notices/getdata.ashx"
                 params = {
-                    'SecurityCode': '000001',  # General market news
-                    'Type': 'RZLZ',
-                    'PageIndex': page,
-                    'PageSize': page_size,
-                    'BeginDate': start_date,
-                    'EndDate': end_date
+                    "SecurityCode": "000001",  # General market news
+                    "Type": "RZLZ",
+                    "PageIndex": page,
+                    "PageSize": page_size,
+                    "BeginDate": start_date,
+                    "EndDate": end_date,
                 }
 
                 try:
@@ -305,29 +315,31 @@ class SentimentCollector:
 
                     data = response.json()
 
-                    if not data or 'Data' not in data:
+                    if not data or "Data" not in data:
                         self.logger.warning(f"No data on page {page}")
                         break
 
-                    news_list = data['Data']
+                    news_list = data["Data"]
 
                     if not news_list:
-                        self.logger.info(f"No more news articles")
+                        self.logger.info("No more news articles")
                         break
 
                     for item in news_list:
                         try:
-                            title = item.get('NoticesTitle', '')
-                            url = item.get('NoticesUrl', '')
-                            publish_time_str = item.get('NoticesTime', '')
-                            content = item.get('NoticesContent', '')
+                            title = item.get("NoticesTitle", "")
+                            url = item.get("NoticesUrl", "")
+                            publish_time_str = item.get("NoticesTime", "")
+                            content = item.get("NoticesContent", "")
 
                             if not title or not url:
                                 continue
 
                             # Parse publish time
                             try:
-                                publish_time = datetime.strptime(publish_time_str, '%Y-%m-%d %H:%M:%S')
+                                publish_time = datetime.strptime(
+                                    publish_time_str, "%Y-%m-%d %H:%M:%S"
+                                )
                             except:
                                 publish_time = datetime.now()
 
@@ -342,8 +354,8 @@ class SentimentCollector:
                                 url=url,
                                 publish_time=publish_time,
                                 content=content,
-                                source='eastmoney',
-                                stock_symbols=stock_symbols
+                                source="eastmoney",
+                                stock_symbols=stock_symbols,
                             )
 
                             # Validate
@@ -370,11 +382,7 @@ class SentimentCollector:
             self.logger.error(f"Eastmoney news fetch failed: {e}")
             raise SentimentCollectionError(f"Eastmoney fetch failed: {e}")
 
-    def fetch_sina_news(
-        self,
-        days: int = 7,
-        max_articles: int = 1000
-    ) -> List[NewsArticle]:
+    def fetch_sina_news(self, days: int = 7, max_articles: int = 1000) -> list[NewsArticle]:
         """
         Fetch news from Sina Finance (新浪财经).
 
@@ -392,7 +400,7 @@ class SentimentCollector:
         try:
             from bs4 import BeautifulSoup
 
-            start_date = (datetime.now() - timedelta(days=days))
+            start_date = datetime.now() - timedelta(days=days)
 
             # Sina finance news page
             page = 1
@@ -400,17 +408,17 @@ class SentimentCollector:
             while len(articles) < max_articles:
                 self._rate_limit()
 
-                url = f"http://finance.sina.com.cn/7x24/"
-                params = {'page': page}
+                url = "http://finance.sina.com.cn/7x24/"
+                params = {"page": page}
 
                 try:
                     response = self.session.get(url, params=params, timeout=10)
                     response.raise_for_status()
 
-                    soup = BeautifulSoup(response.text, 'html.parser')
+                    soup = BeautifulSoup(response.text, "html.parser")
 
                     # Find news items (this selector may need adjustment based on actual HTML)
-                    news_items = soup.select('.content li')  # Adjust as needed
+                    news_items = soup.select(".content li")  # Adjust as needed
 
                     if not news_items:
                         self.logger.info(f"No more news items on page {page}")
@@ -418,24 +426,24 @@ class SentimentCollector:
 
                     for item in news_items:
                         try:
-                            title_elem = item.find('a')
-                            time_elem = item.find('span')
+                            title_elem = item.find("a")
+                            time_elem = item.find("span")
 
                             if not title_elem:
                                 continue
 
                             title = title_elem.get_text(strip=True)
-                            url = title_elem.get('href', '')
+                            url = title_elem.get("href", "")
 
                             # Parse time
-                            time_text = time_elem.get_text(strip=True) if time_elem else ''
+                            time_text = time_elem.get_text(strip=True) if time_elem else ""
                             try:
                                 # Parse relative time like "2小时前"
-                                if '小时前' in time_text:
-                                    hours = int(time_text.replace('小时前', '').strip())
+                                if "小时前" in time_text:
+                                    hours = int(time_text.replace("小时前", "").strip())
                                     publish_time = datetime.now() - timedelta(hours=hours)
-                                elif '分钟前' in time_text:
-                                    minutes = int(time_text.replace('分钟前', '').strip())
+                                elif "分钟前" in time_text:
+                                    minutes = int(time_text.replace("分钟前", "").strip())
                                     publish_time = datetime.now() - timedelta(minutes=minutes)
                                 else:
                                     publish_time = datetime.now()
@@ -455,8 +463,8 @@ class SentimentCollector:
                                 url=url,
                                 publish_time=publish_time,
                                 content=None,  # Sina 7x24 doesn't have full content
-                                source='sina',
-                                stock_symbols=stock_symbols
+                                source="sina",
+                                stock_symbols=stock_symbols,
                             )
 
                             # Validate
@@ -486,7 +494,7 @@ class SentimentCollector:
             self.logger.error(f"Sina Finance news fetch failed: {e}")
             raise SentimentCollectionError(f"Sina Finance fetch failed: {e}")
 
-    def save_news_articles(self, conn, articles: List[NewsArticle]) -> int:
+    def save_news_articles(self, conn, articles: list[NewsArticle]) -> int:
         """
         Save news articles to database.
 
@@ -504,34 +512,38 @@ class SentimentCollector:
 
             for article in articles:
                 # Generate content hash for deduplication
-                content_hash = hashlib.md5(
-                    f"{article.title}{article.url}".encode('utf-8')
-                ).hexdigest()
+                content_hash = hashlib.md5(f"{article.title}{article.url}".encode()).hexdigest()
 
                 # Check if already exists
-                existing = conn.execute("""
+                existing = conn.execute(
+                    """
                     SELECT 1 FROM news_raw
                     WHERE content_hash = ?
-                """, [content_hash]).fetchone()
+                """,
+                    [content_hash],
+                ).fetchone()
 
                 if existing:
                     continue
 
                 # Insert new article
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO news_raw
                     (title, url, publish_time, content, source, stock_symbols,
                      content_hash, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, [
-                    article.title,
-                    article.url,
-                    article.publish_time,
-                    article.content,
-                    article.source,
-                    ','.join(article.stock_symbols),
-                    content_hash
-                ])
+                """,
+                    [
+                        article.title,
+                        article.url,
+                        article.publish_time,
+                        article.content,
+                        article.source,
+                        ",".join(article.stock_symbols),
+                        content_hash,
+                    ],
+                )
 
                 inserted_count += 1
 
@@ -544,12 +556,7 @@ class SentimentCollector:
             conn.execute("ROLLBACK")
             raise SentimentCollectionError(f"Failed to save news articles: {e}")
 
-    def collect_sentiment(
-        self,
-        source: str = 'all',
-        days: int = 7,
-        max_articles: int = 1000
-    ):
+    def collect_sentiment(self, source: str = "all", days: int = 7, max_articles: int = 1000):
         """
         Collect sentiment data from specified sources.
 
@@ -566,16 +573,12 @@ class SentimentCollector:
 
         try:
             all_articles = []
-            stats = {
-                'sources': {},
-                'total_articles': 0,
-                'new_articles': 0
-            }
+            stats = {"sources": {}, "total_articles": 0, "new_articles": 0}
 
             # Fetch from each source
             sources_to_fetch = []
-            if source == 'all':
-                sources_to_fetch = ['eastmoney', 'sina']
+            if source == "all":
+                sources_to_fetch = ["eastmoney", "sina"]
             else:
                 sources_to_fetch = [source]
 
@@ -583,30 +586,30 @@ class SentimentCollector:
                 try:
                     self.logger.info(f"Collecting from {src}...")
                     articles = self._retry_with_backoff(
-                        self.fetch_eastmoney_news if src == 'eastmoney' else self.fetch_sina_news,
+                        self.fetch_eastmoney_news if src == "eastmoney" else self.fetch_sina_news,
                         days=days,
-                        max_articles=max_articles
+                        max_articles=max_articles,
                     )
 
                     all_articles.extend(articles)
-                    stats['sources'][src] = len(articles)
+                    stats["sources"][src] = len(articles)
                     self.logger.info(f"✓ Collected {len(articles)} articles from {src}")
 
                 except SentimentCollectionError as e:
                     self.logger.error(f"Failed to collect from {src}: {e}")
-                    stats['sources'][src] = 0
+                    stats["sources"][src] = 0
 
             # Save to database
-            stats['total_articles'] = len(all_articles)
+            stats["total_articles"] = len(all_articles)
             if all_articles:
-                stats['new_articles'] = self.save_news_articles(conn, all_articles)
+                stats["new_articles"] = self.save_news_articles(conn, all_articles)
 
             # Print summary
             self.logger.info("=" * 80)
             self.logger.info("Sentiment Collection Summary")
             self.logger.info("=" * 80)
             self.logger.info(f"Total sources: {len(sources_to_fetch)}")
-            for src, count in stats['sources'].items():
+            for src, count in stats["sources"].items():
                 self.logger.info(f"  {src}: {count} articles")
             self.logger.info(f"Total articles: {stats['total_articles']}")
             self.logger.info(f"New articles saved: {stats['new_articles']}")
@@ -623,28 +626,13 @@ def main():
 
     parser = argparse.ArgumentParser(description="Collect sentiment data for Chinese stocks")
     parser.add_argument(
-        '--source',
-        choices=['all', 'eastmoney', 'sina'],
-        default='all',
-        help='Data source to use'
+        "--source", choices=["all", "eastmoney", "sina"], default="all", help="Data source to use"
     )
+    parser.add_argument("--days", type=int, default=7, help="Number of days to look back")
     parser.add_argument(
-        '--days',
-        type=int,
-        default=7,
-        help='Number of days to look back'
+        "--max-articles", type=int, default=1000, help="Maximum articles per source"
     )
-    parser.add_argument(
-        '--max-articles',
-        type=int,
-        default=1000,
-        help='Maximum articles per source'
-    )
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose logging'
-    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
 
@@ -658,9 +646,7 @@ def main():
 
         # Collect sentiment
         stats = collector.collect_sentiment(
-            source=args.source,
-            days=args.days,
-            max_articles=args.max_articles
+            source=args.source, days=args.days, max_articles=args.max_articles
         )
 
         # Exit with success

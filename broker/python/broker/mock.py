@@ -6,19 +6,19 @@ a real broker connection. It implements both BrokerInterface and
 the ExecutionClient interface from common.
 """
 
-from typing import Optional, List, Dict, Any
-from datetime import datetime
 import time
 import uuid
+from datetime import datetime
+from typing import Any
 
 from .base import (
+    AccountBalance,
     BrokerInterface,
     Order,
-    Position,
-    AccountBalance,
-    OrderType,
     OrderSide,
     OrderStatus,
+    OrderType,
+    Position,
 )
 
 
@@ -35,10 +35,10 @@ class MockBroker(BrokerInterface):
         self._connected = False
         self.cash = initial_cash
         self.initial_cash = initial_cash
-        self.positions: Dict[str, Position] = {}
-        self.orders: Dict[str, Order] = {}
-        self.market_prices: Dict[str, float] = {}
-        self.market_data: Dict[str, Dict[str, Any]] = {}
+        self.positions: dict[str, Position] = {}
+        self.orders: dict[str, Order] = {}
+        self.market_prices: dict[str, float] = {}
+        self.market_data: dict[str, dict[str, Any]] = {}
 
     # === Connection Management ===
 
@@ -182,7 +182,7 @@ class MockBroker(BrokerInterface):
             raise ValueError(f"Order not found: {order_id}")
         return order
 
-    def get_orders(self, symbol: Optional[str] = None) -> List[Order]:
+    def get_orders(self, symbol: str | None = None) -> list[Order]:
         """Get all orders or orders for a specific symbol"""
         orders = list(self.orders.values())
         if symbol is not None:
@@ -191,11 +191,11 @@ class MockBroker(BrokerInterface):
 
     # === Position Management ===
 
-    def get_positions(self) -> List[Position]:
+    def get_positions(self) -> list[Position]:
         """Get current positions"""
         return list(self.positions.values())
 
-    def get_position(self, symbol: str) -> Optional[Position]:
+    def get_position(self, symbol: str) -> Position | None:
         """Get position for a specific symbol"""
         return self.positions.get(symbol)
 
@@ -226,28 +226,28 @@ class MockBroker(BrokerInterface):
 
     # === Market Data ===
 
-    def subscribe_market_data(self, symbols: List[str]) -> bool:
+    def subscribe_market_data(self, symbols: list[str]) -> bool:
         """Subscribe to market data"""
         for symbol in symbols:
             if symbol not in self.market_prices:
                 self.market_prices[symbol] = 10.0 + hash(symbol) % 100
             self.market_data[symbol] = {
-                'price': self.market_prices[symbol],
-                'bid': self.market_prices[symbol] * 0.995,
-                'ask': self.market_prices[symbol] * 1.005,
-                'volume': 1000000,
-                'timestamp': datetime.now(),
+                "price": self.market_prices[symbol],
+                "bid": self.market_prices[symbol] * 0.995,
+                "ask": self.market_prices[symbol] * 1.005,
+                "volume": 1000000,
+                "timestamp": datetime.now(),
             }
         return True
 
-    def unsubscribe_market_data(self, symbols: List[str]) -> bool:
+    def unsubscribe_market_data(self, symbols: list[str]) -> bool:
         """Unsubscribe from market data"""
         for symbol in symbols:
             if symbol in self.market_data:
                 del self.market_data[symbol]
         return True
 
-    def get_market_data(self, symbol: str) -> Dict[str, Any]:
+    def get_market_data(self, symbol: str) -> dict[str, Any]:
         """Get current market data"""
         if symbol not in self.market_data:
             # Auto-subscribe if not subscribed
@@ -257,7 +257,7 @@ class MockBroker(BrokerInterface):
 
     # === Testing Helpers ===
 
-    def get_market_price(self, symbol: str) -> Optional[float]:
+    def get_market_price(self, symbol: str) -> float | None:
         """
         Get current market price for a symbol
 
@@ -268,7 +268,7 @@ class MockBroker(BrokerInterface):
             Optional[float]: Current price or None
         """
         market_data = self.get_market_data(symbol)
-        return market_data.get('price')
+        return market_data.get("price")
 
     def set_market_price(self, symbol: str, price: float) -> None:
         """
@@ -280,9 +280,9 @@ class MockBroker(BrokerInterface):
         """
         self.market_prices[symbol] = price
         if symbol in self.market_data:
-            self.market_data[symbol]['price'] = price
-            self.market_data[symbol]['bid'] = price * 0.995
-            self.market_data[symbol]['ask'] = price * 1.005
+            self.market_data[symbol]["price"] = price
+            self.market_data[symbol]["bid"] = price * 0.995
+            self.market_data[symbol]["ask"] = price * 1.005
 
         # Update position if exists
         if symbol in self.positions:
@@ -298,7 +298,7 @@ class MockBroker(BrokerInterface):
         time.sleep(0)  # In real implementation, might actually sleep
         # Update timestamps in market data
         for symbol, data in self.market_data.items():
-            data['timestamp'] = datetime.now()
+            data["timestamp"] = datetime.now()
 
     def reset(self) -> None:
         """Reset broker to initial state"""

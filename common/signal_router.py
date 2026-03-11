@@ -4,20 +4,19 @@ Signal Router Implementation
 Aggregates signals from multiple strategies and produces unified portfolio signals.
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import List, Dict, Optional, Tuple
-from collections import defaultdict
 import logging
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
 
+from .config import RouterConfig
+from .interfaces import DataProvider, SignalGenerator
+from .interfaces import SignalRouter as SignalRouterInterface
 from .types import (
-    TradingSignal,
     PortfolioSignal,
     SignalType,
-    SignalStrength,
+    TradingSignal,
 )
-from .interfaces import SignalGenerator, DataProvider, SignalRouter as SignalRouterInterface
-from .config import RouterConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SignalConflict:
     """Represents a conflict between signals"""
+
     symbol: str
-    signals: List[TradingSignal]
+    signals: list[TradingSignal]
     resolution: str  # "weighted", "strongest", "consensus", "dropped"
 
 
@@ -38,7 +38,7 @@ class SignalRouterImpl(SignalRouterInterface):
     and produces unified portfolio signals with risk controls.
     """
 
-    def __init__(self, config: Optional[RouterConfig] = None):
+    def __init__(self, config: RouterConfig | None = None):
         """
         Initialize signal router.
 
@@ -46,10 +46,10 @@ class SignalRouterImpl(SignalRouterInterface):
             config: Router configuration
         """
         self.config = config or RouterConfig()
-        self._strategies: Dict[str, SignalGenerator] = {}
-        self._weights: Dict[str, float] = {}
-        self._signal_history: List[TradingSignal] = []
-        self._last_signal_time: Dict[str, datetime] = {}  # symbol -> last signal time
+        self._strategies: dict[str, SignalGenerator] = {}
+        self._weights: dict[str, float] = {}
+        self._signal_history: list[TradingSignal] = []
+        self._last_signal_time: dict[str, datetime] = {}  # symbol -> last signal time
 
     def add_strategy(self, strategy: SignalGenerator) -> None:
         """Add a signal-generating strategy"""
@@ -63,7 +63,9 @@ class SignalRouterImpl(SignalRouterInterface):
         else:
             self._weights[strategy.name] = 1.0 / (len(self._strategies))
 
-        logger.info(f"Added strategy: {strategy.name} with weight {self._weights[strategy.name]:.2f}")
+        logger.info(
+            f"Added strategy: {strategy.name} with weight {self._weights[strategy.name]:.2f}"
+        )
 
     def remove_strategy(self, strategy_name: str) -> None:
         """Remove a strategy"""
@@ -72,7 +74,7 @@ class SignalRouterImpl(SignalRouterInterface):
             del self._weights[strategy_name]
             logger.info(f"Removed strategy: {strategy_name}")
 
-    def set_weights(self, weights: Dict[str, float]) -> None:
+    def set_weights(self, weights: dict[str, float]) -> None:
         """Set strategy weights"""
         # Normalize weights
         total = sum(weights.values())
@@ -82,7 +84,7 @@ class SignalRouterImpl(SignalRouterInterface):
 
     def aggregate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
     ) -> PortfolioSignal:
@@ -146,7 +148,7 @@ class SignalRouterImpl(SignalRouterInterface):
 
         return portfolio
 
-    def _filter_signals(self, signals: List[TradingSignal]) -> List[TradingSignal]:
+    def _filter_signals(self, signals: list[TradingSignal]) -> list[TradingSignal]:
         """Filter signals by minimum criteria"""
         filtered = []
 
@@ -173,8 +175,7 @@ class SignalRouterImpl(SignalRouterInterface):
                 cooldown_seconds = self.config.signal_cooldown_minutes * 60
                 if (signal.timestamp - last_time).total_seconds() < cooldown_seconds:
                     logger.debug(
-                        f"Dropping signal for {signal.symbol}: "
-                        f"cooldown period not elapsed"
+                        f"Dropping signal for {signal.symbol}: cooldown period not elapsed"
                     )
                     continue
 
@@ -184,8 +185,8 @@ class SignalRouterImpl(SignalRouterInterface):
 
     def _resolve_conflict(
         self,
-        signals: List[TradingSignal],
-    ) -> Tuple[TradingSignal, SignalConflict]:
+        signals: list[TradingSignal],
+    ) -> tuple[TradingSignal, SignalConflict]:
         """
         Resolve conflicting signals for the same symbol.
 
@@ -231,12 +232,10 @@ class SignalRouterImpl(SignalRouterInterface):
 
             # Weighted vote based on strategy weights and signal strength
             buy_score = sum(
-                self._weights.get(s.source, 1.0) * s.strength * s.confidence
-                for s in buy_signals
+                self._weights.get(s.source, 1.0) * s.strength * s.confidence for s in buy_signals
             )
             sell_score = sum(
-                self._weights.get(s.source, 1.0) * s.strength * s.confidence
-                for s in sell_signals
+                self._weights.get(s.source, 1.0) * s.strength * s.confidence for s in sell_signals
             )
 
             if buy_score > sell_score:
@@ -266,18 +265,15 @@ class SignalRouterImpl(SignalRouterInterface):
             resolution="consensus",
         )
 
-    def _merge_signals(self, signals: List[TradingSignal]) -> TradingSignal:
+    def _merge_signals(self, signals: list[TradingSignal]) -> TradingSignal:
         """Merge multiple signals of the same direction"""
         if len(signals) == 1:
             return signals[0]
 
         # Calculate weighted averages
-        total_weight = sum(
-            self._weights.get(s.source, 1.0) * s.confidence
-            for s in signals
-        )
+        total_weight = sum(self._weights.get(s.source, 1.0) * s.confidence for s in signals)
 
-        def weighted_avg(attr: str) -> Optional[float]:
+        def weighted_avg(attr: str) -> float | None:
             values = [getattr(s, attr) for s in signals if getattr(s, attr) is not None]
             if not values:
                 return None
@@ -308,17 +304,17 @@ class SignalRouterImpl(SignalRouterInterface):
 
     def _apply_position_sizing(
         self,
-        signals: List[TradingSignal],
-    ) -> List[TradingSignal]:
+        signals: list[TradingSignal],
+    ) -> list[TradingSignal]:
         """Apply position sizing to signals"""
         for signal in signals:
             if signal.position_size is None:
                 if self.config.position_sizing_method == "signal_strength":
                     # Size proportional to signal strength
                     signal.position_size = (
-                        self.config.base_position_size *
-                        (signal.strength / 50.0) *
-                        signal.confidence
+                        self.config.base_position_size
+                        * (signal.strength / 50.0)
+                        * signal.confidence
                     )
                 elif self.config.position_sizing_method == "equal":
                     signal.position_size = self.config.base_position_size
@@ -339,8 +335,8 @@ class SignalRouterImpl(SignalRouterInterface):
 
     def _apply_risk_limits(
         self,
-        signals: List[TradingSignal],
-    ) -> List[TradingSignal]:
+        signals: list[TradingSignal],
+    ) -> list[TradingSignal]:
         """Apply risk limits to portfolio"""
         if not signals:
             return signals
@@ -366,7 +362,7 @@ class SignalRouterImpl(SignalRouterInterface):
 
     def _build_portfolio_signal(
         self,
-        signals: List[TradingSignal],
+        signals: list[TradingSignal],
         timestamp: datetime,
     ) -> PortfolioSignal:
         """Build final portfolio signal"""
@@ -379,7 +375,7 @@ class SignalRouterImpl(SignalRouterInterface):
         # Check long/short ratio
         if short_exposure > 0 and long_exposure / short_exposure > self.config.max_long_short_ratio:
             logger.warning(
-                f"Long/short ratio {long_exposure/short_exposure:.2f} "
+                f"Long/short ratio {long_exposure / short_exposure:.2f} "
                 f"exceeds limit {self.config.max_long_short_ratio}"
             )
 
@@ -395,9 +391,9 @@ class SignalRouterImpl(SignalRouterInterface):
 
     def get_signal_history(
         self,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         limit: int = 100,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         """Get signal history"""
         history = self._signal_history
 

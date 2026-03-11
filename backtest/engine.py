@@ -5,31 +5,30 @@ Provides a comprehensive backtesting framework for testing strategies
 against historical data with realistic execution simulation.
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any
-from collections import defaultdict
-import pandas as pd
-import numpy as np
 import logging
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from common.types import (
-    TradingSignal,
-    Position,
-    Order,
-    Trade,
-    SignalType,
-    Bar,
-    TimeFrame,
-)
+import numpy as np
+import pandas as pd
+
+from common.config import BacktestConfig
 from common.interfaces import (
     BacktestEngine,
     BacktestResult,
-    SignalGenerator,
     DataProvider,
+    SignalGenerator,
 )
-from common.config import BacktestConfig
+from common.types import (
+    Order,
+    Position,
+    SignalType,
+    TimeFrame,
+    Trade,
+    TradingSignal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +36,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BacktestState:
     """Internal state for backtest execution"""
+
     cash: float
-    positions: Dict[str, Position]
-    equity_curve: List[Dict[str, Any]]
-    trades: List[Trade]
-    signals: List[TradingSignal]
-    pending_orders: List[Order]
-    daily_pnl: List[float]
+    positions: dict[str, Position]
+    equity_curve: list[dict[str, Any]]
+    trades: list[Trade]
+    signals: list[TradingSignal]
+    pending_orders: list[Order]
+    daily_pnl: list[float]
     peak_equity: float = 0.0
     max_drawdown: float = 0.0
 
@@ -63,7 +63,7 @@ class BacktestEngineImpl(BacktestEngine):
     def __init__(
         self,
         data_provider: DataProvider,
-        config: Optional[BacktestConfig] = None,
+        config: BacktestConfig | None = None,
     ):
         """
         Initialize backtest engine.
@@ -82,7 +82,7 @@ class BacktestEngineImpl(BacktestEngine):
     def run(
         self,
         strategy: SignalGenerator,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
         initial_capital: float = 1000000.0,
@@ -156,12 +156,14 @@ class BacktestEngineImpl(BacktestEngine):
 
             # Calculate daily P&L and equity
             daily_equity = self._calculate_equity(state, current_prices)
-            state.equity_curve.append({
-                "date": current_date,
-                "equity": daily_equity,
-                "cash": state.cash,
-                "positions_value": daily_equity - state.cash,
-            })
+            state.equity_curve.append(
+                {
+                    "date": current_date,
+                    "equity": daily_equity,
+                    "cash": state.cash,
+                    "positions_value": daily_equity - state.cash,
+                }
+            )
 
             # Track drawdown
             if daily_equity > state.peak_equity:
@@ -172,8 +174,7 @@ class BacktestEngineImpl(BacktestEngine):
                 state.max_drawdown = drawdown
 
             # Check max drawdown stop
-            if (self.config.max_drawdown_stop and
-                drawdown >= self.config.max_drawdown_stop):
+            if self.config.max_drawdown_stop and drawdown >= self.config.max_drawdown_stop:
                 logger.warning(f"Max drawdown stop triggered at {drawdown:.2%}")
                 break
 
@@ -185,7 +186,7 @@ class BacktestEngineImpl(BacktestEngine):
         # Save outputs
         self._save_results(result, strategy.name)
 
-        logger.info(f"Backtest complete:")
+        logger.info("Backtest complete:")
         logger.info(f"  Total return: {result.total_return:.2%}")
         logger.info(f"  Sharpe ratio: {result.sharpe_ratio:.2f}")
         logger.info(f"  Max drawdown: {result.max_drawdown:.2%}")
@@ -203,7 +204,7 @@ class BacktestEngineImpl(BacktestEngine):
 
     def _load_price_data(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
     ) -> pd.DataFrame:
@@ -220,7 +221,7 @@ class BacktestEngineImpl(BacktestEngine):
             logger.error(f"Error loading price data: {e}")
             return pd.DataFrame()
 
-    def _get_trading_dates(self, price_data: pd.DataFrame) -> List[datetime]:
+    def _get_trading_dates(self, price_data: pd.DataFrame) -> list[datetime]:
         """Extract unique trading dates from price data"""
         if isinstance(price_data.index, pd.MultiIndex):
             # MultiIndex (symbol, timestamp)
@@ -235,7 +236,7 @@ class BacktestEngineImpl(BacktestEngine):
         self,
         price_data: pd.DataFrame,
         date: datetime,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Get closing prices for a specific date"""
         prices = {}
 
@@ -261,7 +262,7 @@ class BacktestEngineImpl(BacktestEngine):
     def _update_position_prices(
         self,
         state: BacktestState,
-        current_prices: Dict[str, float],
+        current_prices: dict[str, float],
     ) -> None:
         """Update position prices with current market data"""
         for symbol, position in state.positions.items():
@@ -271,7 +272,7 @@ class BacktestEngineImpl(BacktestEngine):
     def _process_pending_orders(
         self,
         state: BacktestState,
-        current_prices: Dict[str, float],
+        current_prices: dict[str, float],
         current_date: datetime,
     ) -> None:
         """Process any pending orders"""
@@ -297,7 +298,7 @@ class BacktestEngineImpl(BacktestEngine):
         self,
         order: Order,
         current_price: float,
-    ) -> Optional[float]:
+    ) -> float | None:
         """Calculate fill price based on fill model"""
         if self.config.fill_model == "next_open":
             # Use current price (simplified - in reality would use next day's open)
@@ -312,9 +313,9 @@ class BacktestEngineImpl(BacktestEngine):
 
         # Apply slippage
         if order.side == "BUY":
-            fill_price *= (1 + self._slippage_rate)
+            fill_price *= 1 + self._slippage_rate
         else:
-            fill_price *= (1 - self._slippage_rate)
+            fill_price *= 1 - self._slippage_rate
 
         return fill_price
 
@@ -322,7 +323,7 @@ class BacktestEngineImpl(BacktestEngine):
         self,
         state: BacktestState,
         signal: TradingSignal,
-        current_prices: Dict[str, float],
+        current_prices: dict[str, float],
         current_date: datetime,
     ) -> None:
         """Process a trading signal"""
@@ -381,8 +382,9 @@ class BacktestEngineImpl(BacktestEngine):
         total_cost = notional + commission
         if total_cost > state.cash:
             # Reduce quantity
-            quantity = int((state.cash - self._min_commission) /
-                          (current_price * (1 + self._commission_rate)))
+            quantity = int(
+                (state.cash - self._min_commission) / (current_price * (1 + self._commission_rate))
+            )
             if quantity <= 0:
                 return
             notional = quantity * current_price
@@ -409,7 +411,7 @@ class BacktestEngineImpl(BacktestEngine):
         )
 
         state.trades.append(trade)
-        state.cash -= (notional + commission)
+        state.cash -= notional + commission
 
         # Create position
         position = Position(
@@ -425,10 +427,7 @@ class BacktestEngineImpl(BacktestEngine):
         )
         state.positions[symbol] = position
 
-        logger.debug(
-            f"Entered {signal.signal_type.value} {symbol}: "
-            f"{quantity} @ ¥{fill_price:.2f}"
-        )
+        logger.debug(f"Entered {signal.signal_type.value} {symbol}: {quantity} @ ¥{fill_price:.2f}")
 
     def _handle_exit(
         self,
@@ -466,7 +465,7 @@ class BacktestEngineImpl(BacktestEngine):
         else:
             realized_pnl = (position.entry_price - fill_price) * position.quantity
 
-        realized_pnl -= (commission + stamp_duty)
+        realized_pnl -= commission + stamp_duty
 
         # Create trade
         trade = Trade(
@@ -483,11 +482,10 @@ class BacktestEngineImpl(BacktestEngine):
         )
 
         state.trades.append(trade)
-        state.cash += (notional - commission - stamp_duty)
+        state.cash += notional - commission - stamp_duty
 
         logger.debug(
-            f"Exited {symbol}: {position.quantity} @ ¥{fill_price:.2f}, "
-            f"P&L: ¥{realized_pnl:.2f}"
+            f"Exited {symbol}: {position.quantity} @ ¥{fill_price:.2f}, P&L: ¥{realized_pnl:.2f}"
         )
 
         # Remove position
@@ -496,7 +494,7 @@ class BacktestEngineImpl(BacktestEngine):
     def _calculate_equity(
         self,
         state: BacktestState,
-        current_prices: Dict[str, float],
+        current_prices: dict[str, float],
     ) -> float:
         """Calculate total equity"""
         equity = state.cash
@@ -534,7 +532,7 @@ class BacktestEngineImpl(BacktestEngine):
 
         # Annualized return
         days = (end - start).days
-        years = max(days / 365.0, 1/252)  # At least one trading day
+        years = max(days / 365.0, 1 / 252)  # At least one trading day
         result.annualized_return = (1 + result.total_return) ** (1 / years) - 1
 
         # Max drawdown
@@ -562,7 +560,7 @@ class BacktestEngineImpl(BacktestEngine):
                     if position_entries[trade.symbol]:
                         entry_trade = position_entries[trade.symbol].pop(0)
                         pnl = (trade.price - entry_trade.price) * trade.quantity
-                        pnl -= (trade.commission + entry_trade.commission)
+                        pnl -= trade.commission + entry_trade.commission
                         trade_returns.append(pnl / (entry_trade.price * trade.quantity))
 
                         if pnl > 0:
@@ -577,21 +575,19 @@ class BacktestEngineImpl(BacktestEngine):
             if total_loss > 0:
                 result.profit_factor = total_profit / total_loss
             else:
-                result.profit_factor = float('inf') if total_profit > 0 else 0
+                result.profit_factor = float("inf") if total_profit > 0 else 0
 
         # Sharpe ratio (using daily returns)
         if len(state.equity_curve) > 1:
             equity_values = [e["equity"] for e in state.equity_curve]
             daily_returns = [
-                (equity_values[i] - equity_values[i-1]) / equity_values[i-1]
+                (equity_values[i] - equity_values[i - 1]) / equity_values[i - 1]
                 for i in range(1, len(equity_values))
             ]
 
             if daily_returns and np.std(daily_returns) > 0:
                 # Annualize: sqrt(252) for daily returns
-                result.sharpe_ratio = (
-                    np.mean(daily_returns) / np.std(daily_returns) * np.sqrt(252)
-                )
+                result.sharpe_ratio = np.mean(daily_returns) / np.std(daily_returns) * np.sqrt(252)
 
         return result
 
@@ -650,12 +646,12 @@ class BacktestEngineImpl(BacktestEngine):
 
 def run_backtest(
     strategy: SignalGenerator,
-    symbols: List[str],
+    symbols: list[str],
     start: datetime,
     end: datetime,
     data_provider: DataProvider,
     initial_capital: float = 1000000.0,
-    config: Optional[BacktestConfig] = None,
+    config: BacktestConfig | None = None,
 ) -> BacktestResult:
     """
     Convenience function to run a backtest.

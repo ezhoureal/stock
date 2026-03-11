@@ -6,30 +6,30 @@ Demonstrates the full system working with synthetic data.
 """
 
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
-import pandas as pd
+from pathlib import Path
+from typing import Any
+
 import numpy as np
+import pandas as pd
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from backtest import BacktestEngineImpl
 from common import (
-    TradingSignal,
-    SignalType,
+    BacktestConfig,
+    Bar,
     DataProvider,
+    Fundamentals,
+    RouterConfig,
+    SentimentScore,
     SignalGenerator,
     SignalRouterImpl,
-    RouterConfig,
-    BacktestConfig,
-    BacktestResult,
-    Bar,
+    SignalType,
     TimeFrame,
-    Fundamentals,
-    SentimentScore,
+    TradingSignal,
 )
-from backtest import BacktestEngineImpl
 
 
 class MockDataProvider(DataProvider):
@@ -42,7 +42,7 @@ class MockDataProvider(DataProvider):
 
         # Generate synthetic price data
         np.random.seed(42)
-        dates = pd.date_range(end=datetime.now(), periods=n_days, freq='B')
+        dates = pd.date_range(end=datetime.now(), periods=n_days, freq="B")
 
         self.price_data = {}
         for symbol in self.symbols:
@@ -51,29 +51,33 @@ class MockDataProvider(DataProvider):
             prices = 100 * np.exp(np.cumsum(returns))
             prices = np.clip(prices, 10, 500)  # Keep prices reasonable
 
-            self.price_data[symbol] = pd.DataFrame({
-                'timestamp': dates,
-                'symbol': symbol,
-                'open': prices * (1 + np.random.randn(n_days) * 0.005),
-                'high': prices * (1 + np.abs(np.random.randn(n_days) * 0.01)),
-                'low': prices * (1 - np.abs(np.random.randn(n_days) * 0.01)),
-                'close': prices,
-                'volume': np.random.randint(1000000, 10000000, n_days).astype(float),
-            })
+            self.price_data[symbol] = pd.DataFrame(
+                {
+                    "timestamp": dates,
+                    "symbol": symbol,
+                    "open": prices * (1 + np.random.randn(n_days) * 0.005),
+                    "high": prices * (1 + np.abs(np.random.randn(n_days) * 0.01)),
+                    "low": prices * (1 - np.abs(np.random.randn(n_days) * 0.01)),
+                    "close": prices,
+                    "volume": np.random.randint(1000000, 10000000, n_days).astype(float),
+                }
+            )
 
         # Generate sentiment data
         self.sentiment_data = {}
         for symbol in self.symbols:
             scores = np.random.randn(n_days) * 0.5  # Random sentiment
-            self.sentiment_data[symbol] = pd.DataFrame({
-                'timestamp': dates,
-                'symbol': symbol,
-                'score': scores,
-            })
+            self.sentiment_data[symbol] = pd.DataFrame(
+                {
+                    "timestamp": dates,
+                    "symbol": symbol,
+                    "score": scores,
+                }
+            )
 
     def get_prices(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
@@ -82,79 +86,83 @@ class MockDataProvider(DataProvider):
         for symbol in symbols:
             if symbol in self.price_data:
                 df = self.price_data[symbol].copy()
-                df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
+                df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
                 dfs.append(df)
 
         if not dfs:
             return pd.DataFrame()
 
         result = pd.concat(dfs, ignore_index=True)
-        result = result.set_index(['symbol', 'timestamp'])
+        result = result.set_index(["symbol", "timestamp"])
         return result
 
-    def get_latest_prices(self, symbols: List[str]) -> Dict[str, float]:
+    def get_latest_prices(self, symbols: list[str]) -> dict[str, float]:
         result = {}
         for symbol in symbols:
             if symbol in self.price_data:
-                result[symbol] = float(self.price_data[symbol]['close'].iloc[-1])
+                result[symbol] = float(self.price_data[symbol]["close"].iloc[-1])
         return result
 
     def get_fundamentals(
         self,
-        symbols: List[str],
-        as_of: Optional[datetime] = None,
-    ) -> List[Fundamentals]:
+        symbols: list[str],
+        as_of: datetime | None = None,
+    ) -> list[Fundamentals]:
         fundamentals = []
         for symbol in symbols:
-            price = self.price_data[symbol]['close'].iloc[-1] if symbol in self.price_data else 100
-            fundamentals.append(Fundamentals(
-                symbol=symbol,
-                timestamp=as_of or datetime.now(),
-                pe_ratio=np.random.uniform(10, 40),
-                pb_ratio=np.random.uniform(1, 5),
-                roe=np.random.uniform(0.05, 0.25),
-                eps=price / np.random.uniform(10, 30),
-                sector=np.random.choice(['Technology', 'Finance', 'Consumer', 'Healthcare']),
-            ))
+            price = self.price_data[symbol]["close"].iloc[-1] if symbol in self.price_data else 100
+            fundamentals.append(
+                Fundamentals(
+                    symbol=symbol,
+                    timestamp=as_of or datetime.now(),
+                    pe_ratio=np.random.uniform(10, 40),
+                    pb_ratio=np.random.uniform(1, 5),
+                    roe=np.random.uniform(0.05, 0.25),
+                    eps=price / np.random.uniform(10, 30),
+                    sector=np.random.choice(["Technology", "Finance", "Consumer", "Healthcare"]),
+                )
+            )
         return fundamentals
 
     def get_sentiment(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
-        source: Optional[str] = None,
-    ) -> List[SentimentScore]:
+        source: str | None = None,
+    ) -> list[SentimentScore]:
         scores = []
         for symbol in symbols:
             if symbol in self.sentiment_data:
                 df = self.sentiment_data[symbol]
-                df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
+                df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
                 for _, row in df.iterrows():
-                    scores.append(SentimentScore(
-                        symbol=symbol,
-                        timestamp=row['timestamp'],
-                        score=row['score'],
-                        confidence=0.8,
-                        source='mock',
-                    ))
+                    scores.append(
+                        SentimentScore(
+                            symbol=symbol,
+                            timestamp=row["timestamp"],
+                            score=row["score"],
+                            confidence=0.8,
+                            source="mock",
+                        )
+                    )
         return scores
 
-    def get_latest_sentiment(self, symbols: List[str]) -> Dict[str, SentimentScore]:
+    def get_latest_sentiment(self, symbols: list[str]) -> dict[str, SentimentScore]:
         result = {}
         for symbol in symbols:
             if symbol in self.sentiment_data:
                 last = self.sentiment_data[symbol].iloc[-1]
                 result[symbol] = SentimentScore(
                     symbol=symbol,
-                    timestamp=last['timestamp'],
-                    score=last['score'],
+                    timestamp=last["timestamp"],
+                    score=last["score"],
                     confidence=0.8,
-                    source='mock',
+                    source="mock",
                 )
         return result
 
-    def get_universe(self, universe_name: str = "csi300") -> List[str]:
+    def get_universe(self, universe_name: str = "csi300") -> list[str]:
         return self.symbols
 
     def get_bars(
@@ -163,24 +171,26 @@ class MockDataProvider(DataProvider):
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
-    ) -> List[Bar]:
+    ) -> list[Bar]:
         if symbol not in self.price_data:
             return []
 
         df = self.price_data[symbol]
-        df = df[(df['timestamp'] >= start) & (df['timestamp'] <= end)]
+        df = df[(df["timestamp"] >= start) & (df["timestamp"] <= end)]
 
         bars = []
         for _, row in df.iterrows():
-            bars.append(Bar(
-                symbol=symbol,
-                timestamp=row['timestamp'],
-                open=row['open'],
-                high=row['high'],
-                low=row['low'],
-                close=row['close'],
-                volume=row['volume'],
-            ))
+            bars.append(
+                Bar(
+                    symbol=symbol,
+                    timestamp=row["timestamp"],
+                    open=row["open"],
+                    high=row["high"],
+                    low=row["low"],
+                    close=row["close"],
+                    volume=row["volume"],
+                )
+            )
         return bars
 
 
@@ -197,10 +207,10 @@ class SimpleMomentumStrategy(SignalGenerator):
 
     def generate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         signals = []
 
         lookback = as_of - timedelta(days=30)
@@ -218,7 +228,7 @@ class SimpleMomentumStrategy(SignalGenerator):
 
                 # Calculate momentum
                 returns = symbol_prices.pct_change().dropna()
-                momentum = (returns.iloc[-5:].mean() - returns.iloc[-20:].mean())
+                momentum = returns.iloc[-5:].mean() - returns.iloc[-20:].mean()
 
                 current_price = float(symbol_prices.iloc[-1])
 
@@ -256,16 +266,16 @@ class SimpleMomentumStrategy(SignalGenerator):
 
         return signals
 
-    def update(self, new_data: Dict[str, Any]) -> None:
+    def update(self, new_data: dict[str, Any]) -> None:
         pass
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {}
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         pass
 
-    def get_required_data(self) -> List[str]:
+    def get_required_data(self) -> list[str]:
         return ["prices"]
 
 
@@ -282,10 +292,10 @@ class SentimentStrategy(SignalGenerator):
 
     def generate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         signals = []
 
         # Get sentiment
@@ -341,16 +351,16 @@ class SentimentStrategy(SignalGenerator):
 
         return signals
 
-    def update(self, new_data: Dict[str, Any]) -> None:
+    def update(self, new_data: dict[str, Any]) -> None:
         pass
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         return {}
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         pass
 
-    def get_required_data(self) -> List[str]:
+    def get_required_data(self) -> list[str]:
         return ["prices", "sentiment"]
 
 
@@ -393,10 +403,12 @@ def test_signal_generation():
     print("\nTop 10 signals by strength:")
     sorted_signals = sorted(portfolio.signals, key=lambda s: s.strength, reverse=True)[:10]
     for signal in sorted_signals:
-        print(f"  {signal.symbol}: {signal.signal_type.value:6} | "
-              f"Strength: {signal.strength:5.1f} | "
-              f"Source: {signal.source:10} | "
-              f"Price: ¥{signal.entry_price:.2f}")
+        print(
+            f"  {signal.symbol}: {signal.signal_type.value:6} | "
+            f"Strength: {signal.strength:5.1f} | "
+            f"Source: {signal.source:10} | "
+            f"Price: ¥{signal.entry_price:.2f}"
+        )
 
 
 def test_backtest():
@@ -440,7 +452,7 @@ def test_backtest():
 
     print(result.summary())
 
-    print(f"\nTrades breakdown:")
+    print("\nTrades breakdown:")
     if result.trades:
         buy_trades = [t for t in result.trades if t.side == "BUY"]
         sell_trades = [t for t in result.trades if t.side == "SELL"]
@@ -468,17 +480,19 @@ def test_data_provider():
 
     prices = data_provider.get_prices(symbols, start, end)
     print(f"\nPrice data shape: {prices.shape}")
-    print(f"Date range: {prices.index.get_level_values(1).min().date()} to {prices.index.get_level_values(1).max().date()}")
+    print(
+        f"Date range: {prices.index.get_level_values(1).min().date()} to {prices.index.get_level_values(1).max().date()}"
+    )
 
     # Test latest prices
     latest = data_provider.get_latest_prices(symbols)
-    print(f"\nLatest prices:")
+    print("\nLatest prices:")
     for symbol, price in latest.items():
         print(f"  {symbol}: ¥{price:.2f}")
 
     # Test sentiment
     sentiment = data_provider.get_latest_sentiment(symbols)
-    print(f"\nLatest sentiment:")
+    print("\nLatest sentiment:")
     for symbol, sent in sentiment.items():
         print(f"  {symbol}: {sent.score:.2f}")
 

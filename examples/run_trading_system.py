@@ -6,20 +6,17 @@ Demonstrates how to use the unified trading system interfaces.
 """
 
 import sys
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from common import (
+    BacktestConfig,
     TradingSystem,
     create_system,
     quick_backtest,
-    SentimentArbAdapter,
-    ContrarianAdapter,
-    BacktestConfig,
-    SystemConfig,
 )
 from data.providers import DuckDBDataProvider
 
@@ -117,7 +114,7 @@ def example_custom_strategy():
     print("Example 4: Custom Strategy")
     print("=" * 60)
 
-    from common import SignalGenerator, TradingSignal, SignalType
+    from common import SignalGenerator, SignalType, TradingSignal
 
     class SimpleMomentumStrategy(SignalGenerator):
         """Simple momentum strategy example"""
@@ -191,7 +188,7 @@ def example_custom_strategy():
     symbols = ["600519.SH", "000858.SZ", "601318.SH"]
     portfolio = system.run_once(symbols=symbols)
 
-    print(f"\nSignals from custom strategy:")
+    print("\nSignals from custom strategy:")
     for signal in portfolio.signals:
         if signal.source == "simple_momentum":
             print(f"  {signal.symbol}: {signal.signal_type.value}")
@@ -219,7 +216,7 @@ def example_data_provider():
         # Get latest prices
         sample_symbols = universe[:5]
         prices = provider.get_latest_prices(sample_symbols)
-        print(f"\nLatest prices for sample stocks:")
+        print("\nLatest prices for sample stocks:")
         for symbol, price in prices.items():
             print(f"  {symbol}: ¥{price:.2f}")
 

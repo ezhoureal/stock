@@ -4,21 +4,21 @@ DuckDB Data Provider Implementation
 Provides data access from DuckDB database.
 """
 
-from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any, Iterator
-from pathlib import Path
-import pandas as pd
 import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
+import pandas as pd
+
+from common.config import DataConfig
+from common.interfaces import DataProvider
 from common.types import (
-    MarketData,
+    Bar,
     Fundamentals,
     SentimentScore,
-    Bar,
     TimeFrame,
 )
-from common.interfaces import DataProvider
-from common.config import DataConfig
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class DuckDBDataProvider(DataProvider):
     stored in DuckDB format.
     """
 
-    def __init__(self, config: Optional[DataConfig] = None):
+    def __init__(self, config: DataConfig | None = None):
         """
         Initialize DuckDB data provider.
 
@@ -40,12 +40,13 @@ class DuckDBDataProvider(DataProvider):
         """
         self.config = config or DataConfig()
         self._conn = None
-        self._cache: Dict[str, Any] = {}
+        self._cache: dict[str, Any] = {}
 
     def _get_connection(self):
         """Get or create database connection"""
         if self._conn is None:
             import duckdb
+
             db_path = Path(self.config.db_path)
 
             if not db_path.exists():
@@ -64,7 +65,7 @@ class DuckDBDataProvider(DataProvider):
 
     def get_prices(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
@@ -142,7 +143,7 @@ class DuckDBDataProvider(DataProvider):
             logger.error(f"Error fetching prices: {e}")
             return pd.DataFrame()
 
-    def get_latest_prices(self, symbols: List[str]) -> Dict[str, float]:
+    def get_latest_prices(self, symbols: list[str]) -> dict[str, float]:
         """
         Get latest prices for symbols.
 
@@ -180,9 +181,9 @@ class DuckDBDataProvider(DataProvider):
 
     def get_fundamentals(
         self,
-        symbols: List[str],
-        as_of: Optional[datetime] = None,
-    ) -> List[Fundamentals]:
+        symbols: list[str],
+        as_of: datetime | None = None,
+    ) -> list[Fundamentals]:
         """
         Get fundamental data for symbols.
 
@@ -231,22 +232,24 @@ class DuckDBDataProvider(DataProvider):
 
             results = []
             for _, row in df.iterrows():
-                results.append(Fundamentals(
-                    symbol=row["symbol"],
-                    timestamp=pd.to_datetime(row["report_date"]),
-                    pe_ratio=row.get("pe"),
-                    pe_ttm=row.get("pe_ttm"),
-                    pb_ratio=row.get("pb"),
-                    ps_ratio=row.get("ps"),
-                    roe=row.get("roe"),
-                    roa=row.get("roa"),
-                    eps=row.get("eps"),
-                    book_value_per_share=row.get("book_value_per_share"),
-                    total_mv=row.get("total_mv"),
-                    circ_mv=row.get("circ_mv"),
-                    sector=row.get("sector"),
-                    industry=row.get("industry"),
-                ))
+                results.append(
+                    Fundamentals(
+                        symbol=row["symbol"],
+                        timestamp=pd.to_datetime(row["report_date"]),
+                        pe_ratio=row.get("pe"),
+                        pe_ttm=row.get("pe_ttm"),
+                        pb_ratio=row.get("pb"),
+                        ps_ratio=row.get("ps"),
+                        roe=row.get("roe"),
+                        roa=row.get("roa"),
+                        eps=row.get("eps"),
+                        book_value_per_share=row.get("book_value_per_share"),
+                        total_mv=row.get("total_mv"),
+                        circ_mv=row.get("circ_mv"),
+                        sector=row.get("sector"),
+                        industry=row.get("industry"),
+                    )
+                )
 
             return results
 
@@ -256,11 +259,11 @@ class DuckDBDataProvider(DataProvider):
 
     def get_sentiment(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
-        source: Optional[str] = None,
-    ) -> List[SentimentScore]:
+        source: str | None = None,
+    ) -> list[SentimentScore]:
         """
         Get sentiment scores for symbols.
 
@@ -309,14 +312,16 @@ class DuckDBDataProvider(DataProvider):
 
             results = []
             for _, row in df.iterrows():
-                results.append(SentimentScore(
-                    symbol=row["symbol"],
-                    timestamp=pd.to_datetime(row["timestamp"]),
-                    score=float(row["overall_score"]) if row["overall_score"] else 0.0,
-                    confidence=0.8,  # Default confidence
-                    source=row["source"] or "composite",
-                    sample_size=row.get("news_count", 0),
-                ))
+                results.append(
+                    SentimentScore(
+                        symbol=row["symbol"],
+                        timestamp=pd.to_datetime(row["timestamp"]),
+                        score=float(row["overall_score"]) if row["overall_score"] else 0.0,
+                        confidence=0.8,  # Default confidence
+                        source=row["source"] or "composite",
+                        sample_size=row.get("news_count", 0),
+                    )
+                )
 
             return results
 
@@ -326,8 +331,8 @@ class DuckDBDataProvider(DataProvider):
 
     def get_latest_sentiment(
         self,
-        symbols: List[str],
-    ) -> Dict[str, SentimentScore]:
+        symbols: list[str],
+    ) -> dict[str, SentimentScore]:
         """
         Get latest sentiment scores for symbols.
 
@@ -374,7 +379,7 @@ class DuckDBDataProvider(DataProvider):
             logger.error(f"Error fetching latest sentiment: {e}")
             return {}
 
-    def get_universe(self, universe_name: str = "csi300") -> List[str]:
+    def get_universe(self, universe_name: str = "csi300") -> list[str]:
         """
         Get list of symbols in a universe.
 
@@ -416,7 +421,7 @@ class DuckDBDataProvider(DataProvider):
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
-    ) -> List[Bar]:
+    ) -> list[Bar]:
         """
         Get bar data for a single symbol.
 
@@ -452,16 +457,18 @@ class DuckDBDataProvider(DataProvider):
 
             bars = []
             for _, row in df.iterrows():
-                bars.append(Bar(
-                    symbol=symbol,
-                    timestamp=pd.to_datetime(row["timestamp"]),
-                    open=float(row["open"]),
-                    high=float(row["high"]),
-                    low=float(row["low"]),
-                    close=float(row["close"]),
-                    volume=float(row["volume"]),
-                    amount=float(row["amount"]) if row["amount"] else None,
-                ))
+                bars.append(
+                    Bar(
+                        symbol=symbol,
+                        timestamp=pd.to_datetime(row["timestamp"]),
+                        open=float(row["open"]),
+                        high=float(row["high"]),
+                        low=float(row["low"]),
+                        close=float(row["close"]),
+                        volume=float(row["volume"]),
+                        amount=float(row["amount"]) if row["amount"] else None,
+                    )
+                )
 
             return bars
 
@@ -471,7 +478,7 @@ class DuckDBDataProvider(DataProvider):
 
     def get_price_dataframe(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
     ) -> pd.DataFrame:
@@ -500,7 +507,7 @@ class DuckDBDataProvider(DataProvider):
 
     def get_return_dataframe(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
     ) -> pd.DataFrame:

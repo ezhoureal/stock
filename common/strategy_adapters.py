@@ -4,15 +4,15 @@ Strategy Adapters
 Wraps existing strategy implementations to conform to the SignalGenerator interface.
 """
 
-from datetime import datetime
-from typing import List, Dict, Any, Optional
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from .types import TradingSignal, SignalType
-from .interfaces import SignalGenerator, DataProvider
-from .config import SentimentArbConfig, ContrarianConfig
+from .config import ContrarianConfig, SentimentArbConfig
+from .interfaces import DataProvider, SignalGenerator
+from .types import SignalType, TradingSignal
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class SentimentArbAdapter(SignalGenerator):
     conform to the SignalGenerator interface.
     """
 
-    def __init__(self, config: Optional[SentimentArbConfig] = None):
+    def __init__(self, config: SentimentArbConfig | None = None):
         """
         Initialize sentiment arbitrage adapter.
 
@@ -34,7 +34,7 @@ class SentimentArbAdapter(SignalGenerator):
         """
         self._config = config or SentimentArbConfig()
         self._name = "sentiment_arbitrage"
-        self._state: Dict[str, Any] = {}
+        self._state: dict[str, Any] = {}
 
         # Lazy load the actual implementation
         self._generator = None
@@ -60,8 +60,8 @@ class SentimentArbAdapter(SignalGenerator):
             if base_path.exists():
                 sys.path.insert(0, str(base_path))
 
-            from signal_generation import SignalGenerator as SentArbGenerator
             from signal_generation import SignalConfig
+            from signal_generation import SignalGenerator as SentArbGenerator
 
             # Convert config
             sa_config = SignalConfig(
@@ -84,10 +84,10 @@ class SentimentArbAdapter(SignalGenerator):
 
     def generate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         """
         Generate trading signals using sentiment arbitrage logic.
 
@@ -108,7 +108,9 @@ class SentimentArbAdapter(SignalGenerator):
         try:
             # Get required data
             lookback_days = self._config.lookback_days
-            start_date = datetime(as_of.year, as_of.month, as_of.day) - __import__('datetime').timedelta(days=lookback_days)
+            start_date = datetime(as_of.year, as_of.month, as_of.day) - __import__(
+                "datetime"
+            ).timedelta(days=lookback_days)
 
             # Get prices
             prices_df = data_provider.get_prices(symbols, start_date, as_of)
@@ -122,13 +124,13 @@ class SentimentArbAdapter(SignalGenerator):
             if not sentiment_scores:
                 # Use mock sentiment if not available
                 import numpy as np
+
                 sentiment_map = {s: np.random.randn() for s in symbols}
             else:
                 sentiment_map = {s.symbol: s.score for s in sentiment_scores}
 
             # Calculate z-scores (simplified)
             import numpy as np
-            import pandas as pd
 
             signals = []
 
@@ -158,15 +160,19 @@ class SentimentArbAdapter(SignalGenerator):
                 signal_type = None
                 strength = 0.0
 
-                if (sentiment > self._config.long_sentiment_threshold and
-                    z_score < self._config.long_price_threshold and
-                    dislocation > self._config.long_dislocation_threshold):
+                if (
+                    sentiment > self._config.long_sentiment_threshold
+                    and z_score < self._config.long_price_threshold
+                    and dislocation > self._config.long_dislocation_threshold
+                ):
                     signal_type = SignalType.BUY
                     strength = min((sentiment + abs(z_score) + dislocation) / 10 * 100, 100)
 
-                elif (sentiment < self._config.short_sentiment_threshold and
-                      z_score > self._config.short_price_threshold and
-                      dislocation < self._config.short_dislocation_threshold):
+                elif (
+                    sentiment < self._config.short_sentiment_threshold
+                    and z_score > self._config.short_price_threshold
+                    and dislocation < self._config.short_dislocation_threshold
+                ):
                     signal_type = SignalType.SELL
                     strength = min((abs(sentiment) + z_score + abs(dislocation)) / 10 * 100, 100)
 
@@ -181,15 +187,17 @@ class SentimentArbAdapter(SignalGenerator):
                         confidence=0.7,
                         entry_price=current_price,
                         stop_loss=current_price * (1 - self._config.exit_stop_loss_pct)
-                            if signal_type == SignalType.BUY
-                            else current_price * (1 + self._config.exit_stop_loss_pct),
+                        if signal_type == SignalType.BUY
+                        else current_price * (1 + self._config.exit_stop_loss_pct),
                         take_profit=current_price * (1 + self._config.exit_take_profit_pct)
-                            if signal_type == SignalType.BUY
-                            else current_price * (1 - self._config.exit_take_profit_pct),
+                        if signal_type == SignalType.BUY
+                        else current_price * (1 - self._config.exit_take_profit_pct),
                         sentiment_score=sentiment,
                         price_z_score=z_score,
                         dislocation=dislocation,
-                        reasons=[f"Sentiment: {sentiment:.2f}, Z-score: {z_score:.2f}, Dislocation: {dislocation:.2f}"],
+                        reasons=[
+                            f"Sentiment: {sentiment:.2f}, Z-score: {z_score:.2f}, Dislocation: {dislocation:.2f}"
+                        ],
                     )
                     signals.append(signal)
 
@@ -199,19 +207,19 @@ class SentimentArbAdapter(SignalGenerator):
             logger.error(f"Error generating sentiment arbitrage signals: {e}")
             return []
 
-    def update(self, new_data: Dict[str, Any]) -> None:
+    def update(self, new_data: dict[str, Any]) -> None:
         """Update internal state with new data"""
         self._state.update(new_data)
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Serialize internal state"""
         return self._state.copy()
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         """Restore internal state"""
         self._state = state.copy()
 
-    def get_required_data(self) -> List[str]:
+    def get_required_data(self) -> list[str]:
         """Get required data types"""
         return ["prices", "sentiment"]
 
@@ -224,7 +232,7 @@ class ContrarianAdapter(SignalGenerator):
     conform to the SignalGenerator interface.
     """
 
-    def __init__(self, config: Optional[ContrarianConfig] = None):
+    def __init__(self, config: ContrarianConfig | None = None):
         """
         Initialize contrarian strategy adapter.
 
@@ -233,7 +241,7 @@ class ContrarianAdapter(SignalGenerator):
         """
         self._config = config or ContrarianConfig()
         self._name = "contrarian_strategy"
-        self._state: Dict[str, Any] = {}
+        self._state: dict[str, Any] = {}
 
         # Lazy load the actual implementation
         self._signal_generator = None
@@ -259,9 +267,9 @@ class ContrarianAdapter(SignalGenerator):
             if base_path.exists():
                 sys.path.insert(0, str(base_path))
 
-            from signals import SignalGenerator as ContrarianGenerator
-            from signals import SignalConfig
             from sentiment import SentimentAnalyzer
+            from signals import SignalConfig
+            from signals import SignalGenerator as ContrarianGenerator
             from valuation import ValuationCalculator
 
             # Convert config
@@ -291,10 +299,10 @@ class ContrarianAdapter(SignalGenerator):
 
     def generate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         """
         Generate trading signals using contrarian fundamental logic.
 
@@ -357,16 +365,20 @@ class ContrarianAdapter(SignalGenerator):
                 reasons = []
 
                 # BUY: Bearish sentiment + Undervalued
-                if (sentiment_score < -self._config.sentiment_threshold / 10 and
-                    valuation_score > self._config.undervalued_threshold):
+                if (
+                    sentiment_score < -self._config.sentiment_threshold / 10
+                    and valuation_score > self._config.undervalued_threshold
+                ):
                     signal_type = SignalType.BUY
                     strength = min((abs(sentiment_score) * 20 + valuation_score * 50), 100)
                     reasons.append(f"Bearish sentiment: {sentiment_score:.2f}")
                     reasons.append(f"Undervalued: {valuation_score:.2f}")
 
                 # SELL: Bullish sentiment + Overvalued
-                elif (sentiment_score > self._config.sentiment_threshold / 10 and
-                      valuation_score < self._config.overvalued_threshold):
+                elif (
+                    sentiment_score > self._config.sentiment_threshold / 10
+                    and valuation_score < self._config.overvalued_threshold
+                ):
                     signal_type = SignalType.SELL
                     strength = min((abs(sentiment_score) * 20 + abs(valuation_score) * 50), 100)
                     reasons.append(f"Bullish sentiment: {sentiment_score:.2f}")
@@ -382,11 +394,11 @@ class ContrarianAdapter(SignalGenerator):
                         confidence=0.6,
                         entry_price=price,
                         stop_loss=price * (1 - self._config.stop_loss_pct)
-                            if signal_type == SignalType.BUY
-                            else price * (1 + self._config.stop_loss_pct),
+                        if signal_type == SignalType.BUY
+                        else price * (1 + self._config.stop_loss_pct),
                         take_profit=price * (1 + self._config.take_profit_pct)
-                            if signal_type == SignalType.BUY
-                            else price * (1 - self._config.take_profit_pct),
+                        if signal_type == SignalType.BUY
+                        else price * (1 - self._config.take_profit_pct),
                         sentiment_score=sentiment_score,
                         valuation_score=valuation_score,
                         reasons=reasons,
@@ -399,27 +411,27 @@ class ContrarianAdapter(SignalGenerator):
             logger.error(f"Error generating contrarian signals: {e}")
             return []
 
-    def update(self, new_data: Dict[str, Any]) -> None:
+    def update(self, new_data: dict[str, Any]) -> None:
         """Update internal state"""
         self._state.update(new_data)
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Serialize internal state"""
         return self._state.copy()
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         """Restore internal state"""
         self._state = state.copy()
 
-    def get_required_data(self) -> List[str]:
+    def get_required_data(self) -> list[str]:
         """Get required data types"""
         return ["prices", "fundamentals", "sentiment"]
 
 
 def create_strategy_adapters(
-    sentiment_arb_config: Optional[SentimentArbConfig] = None,
-    contrarian_config: Optional[ContrarianConfig] = None,
-) -> Dict[str, SignalGenerator]:
+    sentiment_arb_config: SentimentArbConfig | None = None,
+    contrarian_config: ContrarianConfig | None = None,
+) -> dict[str, SignalGenerator]:
     """
     Factory function to create strategy adapters.
 

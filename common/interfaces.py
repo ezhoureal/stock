@@ -5,21 +5,22 @@ Defines the contracts that each component must implement.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Iterator
+from typing import Any
+
 import pandas as pd
 
 from .types import (
-    TradingSignal,
-    PortfolioSignal,
-    MarketData,
-    Fundamentals,
-    SentimentScore,
-    Position,
-    Order,
-    Trade,
     Bar,
+    Fundamentals,
+    Order,
+    PortfolioSignal,
+    Position,
+    SentimentScore,
     TimeFrame,
+    Trade,
+    TradingSignal,
 )
 
 
@@ -33,7 +34,7 @@ class DataProvider(ABC):
     @abstractmethod
     def get_prices(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
@@ -54,7 +55,7 @@ class DataProvider(ABC):
         pass
 
     @abstractmethod
-    def get_latest_prices(self, symbols: List[str]) -> Dict[str, float]:
+    def get_latest_prices(self, symbols: list[str]) -> dict[str, float]:
         """
         Get latest prices for symbols.
 
@@ -69,9 +70,9 @@ class DataProvider(ABC):
     @abstractmethod
     def get_fundamentals(
         self,
-        symbols: List[str],
-        as_of: Optional[datetime] = None,
-    ) -> List[Fundamentals]:
+        symbols: list[str],
+        as_of: datetime | None = None,
+    ) -> list[Fundamentals]:
         """
         Get fundamental data for symbols.
 
@@ -87,11 +88,11 @@ class DataProvider(ABC):
     @abstractmethod
     def get_sentiment(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
-        source: Optional[str] = None,
-    ) -> List[SentimentScore]:
+        source: str | None = None,
+    ) -> list[SentimentScore]:
         """
         Get sentiment scores for symbols.
 
@@ -109,8 +110,8 @@ class DataProvider(ABC):
     @abstractmethod
     def get_latest_sentiment(
         self,
-        symbols: List[str],
-    ) -> Dict[str, SentimentScore]:
+        symbols: list[str],
+    ) -> dict[str, SentimentScore]:
         """
         Get latest sentiment scores for symbols.
 
@@ -123,7 +124,7 @@ class DataProvider(ABC):
         pass
 
     @abstractmethod
-    def get_universe(self, universe_name: str = "csi300") -> List[str]:
+    def get_universe(self, universe_name: str = "csi300") -> list[str]:
         """
         Get list of symbols in a universe.
 
@@ -142,7 +143,7 @@ class DataProvider(ABC):
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
-    ) -> List[Bar]:
+    ) -> list[Bar]:
         """
         Get bar data for a single symbol.
 
@@ -159,7 +160,7 @@ class DataProvider(ABC):
 
     def stream_bars(
         self,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
         timeframe: TimeFrame = TimeFrame.DAY_1,
@@ -208,10 +209,10 @@ class SignalGenerator(ABC):
     @abstractmethod
     def generate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
-    ) -> List[TradingSignal]:
+    ) -> list[TradingSignal]:
         """
         Generate trading signals for given symbols.
 
@@ -226,7 +227,7 @@ class SignalGenerator(ABC):
         pass
 
     @abstractmethod
-    def update(self, new_data: Dict[str, Any]) -> None:
+    def update(self, new_data: dict[str, Any]) -> None:
         """
         Update internal state with new data.
 
@@ -238,7 +239,7 @@ class SignalGenerator(ABC):
         pass
 
     @abstractmethod
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """
         Serialize internal state for persistence.
 
@@ -248,7 +249,7 @@ class SignalGenerator(ABC):
         pass
 
     @abstractmethod
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         """
         Restore internal state from serialized form.
 
@@ -258,7 +259,7 @@ class SignalGenerator(ABC):
         pass
 
     @abstractmethod
-    def get_required_data(self) -> List[str]:
+    def get_required_data(self) -> list[str]:
         """
         Get list of required data types for this strategy.
 
@@ -267,7 +268,7 @@ class SignalGenerator(ABC):
         """
         pass
 
-    def validate_signals(self, signals: List[TradingSignal]) -> List[TradingSignal]:
+    def validate_signals(self, signals: list[TradingSignal]) -> list[TradingSignal]:
         """
         Validate and filter signals (optional override).
 
@@ -352,7 +353,7 @@ class ExecutionClient(ABC):
         pass
 
     @abstractmethod
-    def get_orders(self, symbol: Optional[str] = None) -> List[Order]:
+    def get_orders(self, symbol: str | None = None) -> list[Order]:
         """
         Get all orders or orders for a specific symbol.
 
@@ -365,7 +366,7 @@ class ExecutionClient(ABC):
         pass
 
     @abstractmethod
-    def get_positions(self) -> List[Position]:
+    def get_positions(self) -> list[Position]:
         """
         Get current positions.
 
@@ -375,7 +376,7 @@ class ExecutionClient(ABC):
         pass
 
     @abstractmethod
-    def get_position(self, symbol: str) -> Optional[Position]:
+    def get_position(self, symbol: str) -> Position | None:
         """
         Get position for a specific symbol.
 
@@ -438,7 +439,7 @@ class SignalRouter(ABC):
     @abstractmethod
     def aggregate_signals(
         self,
-        symbols: List[str],
+        symbols: list[str],
         as_of: datetime,
         data_provider: DataProvider,
     ) -> PortfolioSignal:
@@ -456,7 +457,7 @@ class SignalRouter(ABC):
         pass
 
     @abstractmethod
-    def set_weights(self, weights: Dict[str, float]) -> None:
+    def set_weights(self, weights: dict[str, float]) -> None:
         """
         Set strategy weights for aggregation.
 
@@ -477,7 +478,7 @@ class BacktestEngine(ABC):
     def run(
         self,
         strategy: SignalGenerator,
-        symbols: List[str],
+        symbols: list[str],
         start: datetime,
         end: datetime,
         initial_capital: float = 1000000.0,
@@ -532,12 +533,12 @@ class BacktestResult:
         self.win_rate: float = 0.0
         self.total_trades: int = 0
         self.profit_factor: float = 0.0
-        self.trades: List[Trade] = []
-        self.equity_curve: List[Dict[str, Any]] = []
-        self.positions_history: List[Dict[str, Any]] = []
-        self.signals: List[TradingSignal] = []
+        self.trades: list[Trade] = []
+        self.equity_curve: list[dict[str, Any]] = []
+        self.positions_history: list[dict[str, Any]] = []
+        self.signals: list[TradingSignal] = []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             "initial_capital": self.initial_capital,

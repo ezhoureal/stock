@@ -5,17 +5,18 @@ Calculates sentiment scores from multiple sources (news, social media, search vo
 for Chinese stocks.
 """
 
+import json
+from dataclasses import dataclass
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-import json
 
 
 @dataclass
 class SentimentConfig:
     """Configuration for sentiment calculations"""
+
     # Source weights
     news_weight: float = 0.40
     social_weight: float = 0.35
@@ -23,7 +24,7 @@ class SentimentConfig:
     forum_weight: float = 0.10
 
     # Smoothing
-    ema_alpha: float = 0.2      # EMA smoothing factor
+    ema_alpha: float = 0.2  # EMA smoothing factor
     roc_threshold: float = 1.0  # Rate of change threshold
 
     # Scoring range
@@ -40,26 +41,28 @@ class SentimentConfig:
 @dataclass
 class SentimentSource:
     """Sentiment data from a single source"""
-    source: str               # 'news', 'social', 'search', 'forum'
-    timestamp: datetime       # When the data was collected
-    raw_sentiment: float      # Raw sentiment [-1, 1] before weighting
-    normalized: float         # Normalized [-1, 1]
-    confidence: float         # Confidence score [0, 1]
-    metadata: Optional[Dict]  # Additional metadata
+
+    source: str  # 'news', 'social', 'search', 'forum'
+    timestamp: datetime  # When the data was collected
+    raw_sentiment: float  # Raw sentiment [-1, 1] before weighting
+    normalized: float  # Normalized [-1, 1]
+    confidence: float  # Confidence score [0, 1]
+    metadata: dict | None  # Additional metadata
 
 
 @dataclass
 class SentimentResult:
     """Complete sentiment analysis result"""
+
     symbol: str
     timestamp: datetime
-    total_score: float        # S_total [-5, 5]
-    smoothed_score: float     # EMA-smoothed
-    roc: float                # Rate of change
-    interpretation: str       # Text interpretation
-    source_scores: Dict[str, float]  # Score by source
-    confidences: Dict[str, float]     # Confidence by source
-    signals: Dict[str, bool]   # Signal flags (rapid_deterioration, rapid_improvement, etc.)
+    total_score: float  # S_total [-5, 5]
+    smoothed_score: float  # EMA-smoothed
+    roc: float  # Rate of change
+    interpretation: str  # Text interpretation
+    source_scores: dict[str, float]  # Score by source
+    confidences: dict[str, float]  # Confidence by source
+    signals: dict[str, bool]  # Signal flags (rapid_deterioration, rapid_improvement, etc.)
 
 
 class SentimentAnalyzer:
@@ -67,7 +70,7 @@ class SentimentAnalyzer:
     Analyzes sentiment from multiple sources for Chinese stocks.
     """
 
-    def __init__(self, config: Optional[SentimentConfig] = None):
+    def __init__(self, config: SentimentConfig | None = None):
         """
         Initialize the sentiment analyzer.
 
@@ -75,14 +78,11 @@ class SentimentAnalyzer:
             config: Sentiment configuration (uses defaults if None)
         """
         self.config = config or SentimentConfig()
-        self._historical_scores: Dict[str, List[float]] = {}
-        self._historical_timestamps: Dict[str, List[datetime]] = {}
+        self._historical_scores: dict[str, list[float]] = {}
+        self._historical_timestamps: dict[str, list[datetime]] = {}
 
     def normalize_sentiment(
-        self,
-        raw_sentiment: float,
-        min_val: float = -1.0,
-        max_val: float = 1.0
+        self, raw_sentiment: float, min_val: float = -1.0, max_val: float = 1.0
     ) -> float:
         """
         Normalize raw sentiment to [-1, 1] range.
@@ -117,9 +117,7 @@ class SentimentAnalyzer:
         return sentiment * weight
 
     def calculate_total_score(
-        self,
-        source_sentiments: Dict[str, float],
-        weights: Dict[str, float]
+        self, source_sentiments: dict[str, float], weights: dict[str, float]
     ) -> float:
         """
         Calculate total sentiment score from multiple sources.
@@ -151,10 +149,7 @@ class SentimentAnalyzer:
         return np.clip(total_score, self.config.min_score, self.config.max_score)
 
     def smooth_score(
-        self,
-        current_score: float,
-        symbol: str,
-        timestamp: Optional[datetime] = None
+        self, current_score: float, symbol: str, timestamp: datetime | None = None
     ) -> float:
         """
         Apply EMA smoothing to sentiment score.
@@ -239,10 +234,7 @@ class SentimentAnalyzer:
             return "neutral"
 
     def calculate_sentiment(
-        self,
-        symbol: str,
-        sources: List[SentimentSource],
-        timestamp: Optional[datetime] = None
+        self, symbol: str, sources: list[SentimentSource], timestamp: datetime | None = None
     ) -> SentimentResult:
         """
         Calculate complete sentiment analysis from multiple sources.
@@ -260,10 +252,10 @@ class SentimentAnalyzer:
 
         # Define weights
         weights = {
-            'news': self.config.news_weight,
-            'social': self.config.social_weight,
-            'search': self.config.search_weight,
-            'forum': self.config.forum_weight
+            "news": self.config.news_weight,
+            "social": self.config.social_weight,
+            "search": self.config.search_weight,
+            "forum": self.config.forum_weight,
         }
 
         # Extract normalized sentiments by source
@@ -290,13 +282,13 @@ class SentimentAnalyzer:
 
         # Generate signals
         signals = {
-            'rapid_deterioration': roc < -self.config.roc_threshold,
-            'rapid_improvement': roc > self.config.roc_threshold,
-            'extreme_bearish': smoothed_score <= self.config.extreme_bearish,
-            'extreme_bullish': smoothed_score >= self.config.extreme_bullish,
-            'bearish': self.config.extreme_bearish < smoothed_score <= self.config.bearish,
-            'bullish': self.config.bullish <= smoothed_score < self.config.extreme_bullish,
-            'neutral': self.config.bearish < smoothed_score < self.config.bullish
+            "rapid_deterioration": roc < -self.config.roc_threshold,
+            "rapid_improvement": roc > self.config.roc_threshold,
+            "extreme_bearish": smoothed_score <= self.config.extreme_bearish,
+            "extreme_bullish": smoothed_score >= self.config.extreme_bullish,
+            "bearish": self.config.extreme_bearish < smoothed_score <= self.config.bearish,
+            "bullish": self.config.bullish <= smoothed_score < self.config.extreme_bullish,
+            "neutral": self.config.bearish < smoothed_score < self.config.bullish,
         }
 
         return SentimentResult(
@@ -308,14 +300,11 @@ class SentimentAnalyzer:
             interpretation=interpretation,
             source_scores=source_scores,
             confidences=confidences,
-            signals=signals
+            signals=signals,
         )
 
     def get_historical_scores(
-        self,
-        symbol: str,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        self, symbol: str, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
         """
         Get historical sentiment scores for a symbol.
@@ -329,28 +318,21 @@ class SentimentAnalyzer:
             DataFrame with columns [timestamp, score]
         """
         if symbol not in self._historical_scores:
-            return pd.DataFrame(columns=['timestamp', 'score'])
+            return pd.DataFrame(columns=["timestamp", "score"])
 
         timestamps = self._historical_timestamps[symbol]
         scores = self._historical_scores[symbol]
 
-        df = pd.DataFrame({
-            'timestamp': timestamps,
-            'score': scores
-        })
+        df = pd.DataFrame({"timestamp": timestamps, "score": scores})
 
         if start_date:
-            df = df[df['timestamp'] >= start_date]
+            df = df[df["timestamp"] >= start_date]
         if end_date:
-            df = df[df['timestamp'] <= end_date]
+            df = df[df["timestamp"] <= end_date]
 
         return df.reset_index(drop=True)
 
-    def calculate_sentiment_stats(
-        self,
-        symbol: str,
-        window: int = 30
-    ) -> Dict[str, float]:
+    def calculate_sentiment_stats(self, symbol: str, window: int = 30) -> dict[str, float]:
         """
         Calculate statistics for sentiment over a time window.
 
@@ -370,19 +352,17 @@ class SentimentAnalyzer:
             return {}
 
         return {
-            'mean': np.mean(scores),
-            'std': np.std(scores),
-            'min': np.min(scores),
-            'max': np.max(scores),
-            'current': scores[-1],
-            'z_score': (scores[-1] - np.mean(scores[:-1])) / (np.std(scores[:-1]) + 1e-8) if len(scores) > 1 else 0.0
+            "mean": np.mean(scores),
+            "std": np.std(scores),
+            "min": np.min(scores),
+            "max": np.max(scores),
+            "current": scores[-1],
+            "z_score": (scores[-1] - np.mean(scores[:-1])) / (np.std(scores[:-1]) + 1e-8)
+            if len(scores) > 1
+            else 0.0,
         }
 
-    def is_sentiment_extreme(
-        self,
-        symbol: str,
-        threshold_std: float = 1.5
-    ) -> Tuple[bool, float]:
+    def is_sentiment_extreme(self, symbol: str, threshold_std: float = 1.5) -> tuple[bool, float]:
         """
         Check if current sentiment is extreme (deviation from mean).
 
@@ -398,7 +378,7 @@ class SentimentAnalyzer:
         if not stats:
             return False, 0.0
 
-        z_score = abs(stats['z_score'])
+        z_score = abs(stats["z_score"])
         is_extreme = z_score >= threshold_std
 
         return is_extreme, z_score
@@ -411,9 +391,8 @@ class SentimentDataParser:
 
     @staticmethod
     def parse_news_sentiment(
-        articles: List[Dict],
-        sentiment_field: str = 'sentiment'
-    ) -> List[SentimentSource]:
+        articles: list[dict], sentiment_field: str = "sentiment"
+    ) -> list[SentimentSource]:
         """
         Parse news article sentiment.
 
@@ -428,7 +407,11 @@ class SentimentDataParser:
 
         for article in articles:
             raw_sentiment = article.get(sentiment_field, 0.0)
-            timestamp = datetime.fromisoformat(article['published_at']) if 'published_at' in article else datetime.now()
+            timestamp = (
+                datetime.fromisoformat(article["published_at"])
+                if "published_at" in article
+                else datetime.now()
+            )
 
             # Normalize from [0, 1] to [-1, 1] if needed
             if 0 <= raw_sentiment <= 1:
@@ -437,21 +420,19 @@ class SentimentDataParser:
                 normalized = np.clip(raw_sentiment, -1, 1)
 
             source = SentimentSource(
-                source='news',
+                source="news",
                 timestamp=timestamp,
                 raw_sentiment=raw_sentiment,
                 normalized=normalized,
-                confidence=article.get('confidence', 0.7),
-                metadata={'article_id': article.get('id')}
+                confidence=article.get("confidence", 0.7),
+                metadata={"article_id": article.get("id")},
             )
             sources.append(source)
 
         return sources
 
     @staticmethod
-    def parse_social_media_sentiment(
-        posts: List[Dict]
-    ) -> List[SentimentSource]:
+    def parse_social_media_sentiment(posts: list[dict]) -> list[SentimentSource]:
         """
         Parse social media (Weibo, 东方财富股吧) sentiment.
 
@@ -464,22 +445,23 @@ class SentimentDataParser:
         sources = []
 
         for post in posts:
-            raw_sentiment = post.get('sentiment', 0.0)
-            timestamp = datetime.fromisoformat(post['created_at']) if 'created_at' in post else datetime.now()
+            raw_sentiment = post.get("sentiment", 0.0)
+            timestamp = (
+                datetime.fromisoformat(post["created_at"])
+                if "created_at" in post
+                else datetime.now()
+            )
 
             # Normalize
             normalized = np.clip(raw_sentiment, -1, 1)
 
             source = SentimentSource(
-                source='social',
+                source="social",
                 timestamp=timestamp,
                 raw_sentiment=raw_sentiment,
                 normalized=normalized,
-                confidence=post.get('confidence', 0.6),
-                metadata={
-                    'platform': post.get('platform', 'unknown'),
-                    'post_id': post.get('id')
-                }
+                confidence=post.get("confidence", 0.6),
+                metadata={"platform": post.get("platform", "unknown"), "post_id": post.get("id")},
             )
             sources.append(source)
 
@@ -487,9 +469,8 @@ class SentimentDataParser:
 
     @staticmethod
     def parse_search_volume(
-        search_data: List[Dict],
-        baseline_period: str = '30d'
-    ) -> List[SentimentSource]:
+        search_data: list[dict], baseline_period: str = "30d"
+    ) -> list[SentimentSource]:
         """
         Parse search volume data (Baidu trends).
 
@@ -511,12 +492,12 @@ class SentimentDataParser:
             return sources
 
         # Calculate baseline
-        volumes = [d['volume'] for d in search_data]
+        volumes = [d["volume"] for d in search_data]
         baseline = np.mean(volumes)
 
         for data in search_data:
-            volume = data['volume']
-            price_change = data.get('price_change', 0.0)  # Daily price change
+            volume = data["volume"]
+            price_change = data.get("price_change", 0.0)  # Daily price change
 
             # Normalize volume: volume_ratio > 1 = higher than baseline
             volume_ratio = volume / (baseline + 1e-8)
@@ -537,19 +518,19 @@ class SentimentDataParser:
                 # Normal or low search volume
                 sentiment = 0.0
 
-            timestamp = datetime.fromisoformat(data['date']) if 'date' in data else datetime.now()
+            timestamp = datetime.fromisoformat(data["date"]) if "date" in data else datetime.now()
 
             source = SentimentSource(
-                source='search',
+                source="search",
                 timestamp=timestamp,
                 raw_sentiment=sentiment,
                 normalized=sentiment,
                 confidence=0.5,
                 metadata={
-                    'volume': volume,
-                    'volume_ratio': volume_ratio,
-                    'price_change': price_change
-                }
+                    "volume": volume,
+                    "volume_ratio": volume_ratio,
+                    "price_change": price_change,
+                },
             )
             sources.append(source)
 
@@ -566,7 +547,7 @@ def load_config(config_path: str) -> SentimentConfig:
     Returns:
         SentimentConfig instance
     """
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         config_dict = json.load(f)
 
     # Convert to correct types
@@ -581,37 +562,37 @@ if __name__ == "__main__":
     # Example sentiment sources for a stock
     sources = [
         SentimentSource(
-            source='news',
+            source="news",
             timestamp=datetime.now(),
             raw_sentiment=-0.3,  # Bearish news
             normalized=-0.3,
             confidence=0.8,
-            metadata={'article_count': 5}
+            metadata={"article_count": 5},
         ),
         SentimentSource(
-            source='social',
+            source="social",
             timestamp=datetime.now(),
             raw_sentiment=-0.5,  # Very bearish social media
             normalized=-0.5,
             confidence=0.7,
-            metadata={'platform': 'weibo', 'post_count': 100}
+            metadata={"platform": "weibo", "post_count": 100},
         ),
         SentimentSource(
-            source='search',
+            source="search",
             timestamp=datetime.now(),
             raw_sentiment=-0.7,  # Panic selling
             normalized=-0.7,
             confidence=0.6,
-            metadata={'volume_ratio': 2.0, 'price_change': -0.05}
+            metadata={"volume_ratio": 2.0, "price_change": -0.05},
         ),
         SentimentSource(
-            source='forum',
+            source="forum",
             timestamp=datetime.now(),
             raw_sentiment=-0.4,
             normalized=-0.4,
             confidence=0.5,
-            metadata={'post_count': 50}
-        )
+            metadata={"post_count": 50},
+        ),
     ]
 
     result = analyzer.calculate_sentiment("600519.SH", sources)
@@ -619,18 +600,18 @@ if __name__ == "__main__":
     print("=== Sentiment Analysis ===")
     print(f"Symbol: {result.symbol}")
     print(f"Timestamp: {result.timestamp}")
-    print(f"\nScores:")
+    print("\nScores:")
     print(f"  Total Score: {result.total_score:.2f}")
     print(f"  Smoothed Score: {result.smoothed_score:.2f}")
     print(f"  Rate of Change: {result.roc:.2f}")
     print(f"\nInterpretation: {result.interpretation}")
-    print(f"\nSource Scores:")
+    print("\nSource Scores:")
     for source, score in result.source_scores.items():
         print(f"  {source}: {score:.2f}")
-    print(f"\nConfidences:")
+    print("\nConfidences:")
     for source, conf in result.confidences.items():
         print(f"  {source}: {conf:.2f}")
-    print(f"\nSignals:")
+    print("\nSignals:")
     for signal, value in result.signals.items():
         if value:
             print(f"  ✓ {signal}")

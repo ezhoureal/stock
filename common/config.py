@@ -4,10 +4,9 @@ Configuration Classes for Trading System
 Centralized configuration management for all components.
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List
-from pathlib import Path
 import json
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -62,7 +61,7 @@ class BacktestConfig:
 
     # Risk
     max_position_pct: float = 0.10  # Max 10% per position in backtest
-    max_drawdown_stop: Optional[float] = 0.20  # Stop backtest at 20% drawdown
+    max_drawdown_stop: float | None = 0.20  # Stop backtest at 20% drawdown
 
     # Output
     save_trades: bool = True
@@ -231,7 +230,7 @@ class SystemConfig:
     @classmethod
     def from_file(cls, path: str) -> "SystemConfig":
         """Load configuration from JSON file"""
-        with open(path, "r") as f:
+        with open(path) as f:
             data = json.load(f)
 
         return cls(

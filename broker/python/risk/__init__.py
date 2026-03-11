@@ -1,6 +1,7 @@
 """
 Risk Control Module
 """
+
 from .controls import RiskManager
 
-__all__ = ['RiskManager']
+__all__ = ["RiskManager"]
