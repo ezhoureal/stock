@@ -12,7 +12,6 @@ venv/
 
 # uv
 .uv/
-uv.lock
 
 # Database files
 *.duckdb
