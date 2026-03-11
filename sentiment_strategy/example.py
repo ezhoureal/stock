@@ -6,11 +6,12 @@ This example shows how to use the strategy modules together to generate trading 
 
 from datetime import datetime
 
-from sentiment import SentimentAnalyzer, SentimentSource
-from signals import Position, SignalGenerator
+from common.types import SignalType
+from sentiment_strategy.sentiment import SentimentAnalyzer, SentimentSource
+from sentiment_strategy.signals import InternalPosition, SignalGenerator
 
 # Import strategy components
-from valuation import SectorMetrics, ValuationCalculator, ValuationMetrics
+from sentiment_strategy.valuation import SectorMetrics, ValuationCalculator, ValuationMetrics
 
 
 def print_section(title: str):
@@ -335,9 +336,9 @@ def example_position_tracking():
     signal_generator = SignalGenerator(sentiment_analyzer, valuation_calc)
 
     # Create a position
-    position = Position(
+    position = InternalPosition(
         symbol="600519.SH",
-        entry_type="BUY",
+        entry_type=SignalType.BUY,
         entry_price=100.0,
         entry_date=datetime.now(),
         quantity=100,
@@ -349,28 +350,28 @@ def example_position_tracking():
     # Add to signal generator
     signal_generator.add_position(position)
 
-    print(f"\nPosition: {position.symbol} ({position.entry_type})")
-    print(f"Entry Price: ¥{position.entry_price:.2f}")
+    print(f"\nPosition: {position.symbol} ({position.entry_type.value})")
+    print(f"Entry Price: Y{position.entry_price:.2f}")
     print(f"Quantity: {position.quantity} shares")
-    print(f"Stop Loss: ¥{position.stop_loss:.2f}")
-    print(f"Take Profit: ¥{position.take_profit:.2f}")
+    print(f"Stop Loss: Y{position.stop_loss:.2f}")
+    print(f"Take Profit: Y{position.take_profit:.2f}")
 
     # Scenario 1: Price hits stop-loss
     print("\n--- Scenario 1: Stop-Loss Hit ---")
     current_price = 91.5  # Below stop-loss
-    exit_result = signal_generator.check_exit_conditions(position, current_price)
+    exit_result = signal_generator._check_exit_conditions(position, current_price)
     if exit_result:
         exit_type, reasons = exit_result
-        print(f"Exit Signal: {exit_type}")
+        print(f"Exit Signal: {exit_type.value}")
         print(f"Reason: {reasons[0]}")
 
     # Scenario 2: Price hits take-profit
     print("\n--- Scenario 2: Take-Profit Hit ---")
     current_price = 116.0  # Above take-profit
-    exit_result = signal_generator.check_exit_conditions(position, current_price)
+    exit_result = signal_generator._check_exit_conditions(position, current_price)
     if exit_result:
         exit_type, reasons = exit_result
-        print(f"Exit Signal: {exit_type}")
+        print(f"Exit Signal: {exit_type.value}")
         print(f"Reason: {reasons[0]}")
 
     # Scenario 3: Sentiment reversal
@@ -402,12 +403,12 @@ def example_position_tracking():
     print(f"New Sentiment: {sentiment.smoothed_score:.2f} (was bearish)")
     print(f"Rate of Change: {sentiment.roc:.2f}")
 
-    exit_result = signal_generator.check_exit_conditions(
+    exit_result = signal_generator._check_exit_conditions(
         position, current_price, sentiment=sentiment
     )
     if exit_result:
         exit_type, reasons = exit_result
-        print(f"Exit Signal: {exit_type}")
+        print(f"Exit Signal: {exit_type.value}")
         print(f"Reason: {reasons[0]}")
     else:
         print("No exit signal - sentiment not reversed enough")

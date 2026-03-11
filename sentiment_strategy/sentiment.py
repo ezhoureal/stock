@@ -6,11 +6,16 @@ for Chinese stocks.
 """
 
 import json
+import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
+
+# Configure module logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -37,6 +42,10 @@ class SentimentConfig:
     bullish: float = 1.5
     extreme_bullish: float = 3.0
 
+    # BUG-005: Cold start fallback configuration
+    min_observations_for_stats: int = 10  # Minimum observations for reliable z-score
+    fallback_threshold_abs: float = 2.0  # Absolute threshold for fallback mode
+
 
 @dataclass
 class SentimentSource:
@@ -48,6 +57,11 @@ class SentimentSource:
     normalized: float  # Normalized [-1, 1]
     confidence: float  # Confidence score [0, 1]
     metadata: dict | None  # Additional metadata
+
+    def __post_init__(self) -> None:
+        """Validate confidence is in valid range [0, 1]."""
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"confidence must be between 0 and 1, got {self.confidence}")
 
 
 @dataclass
@@ -78,8 +92,13 @@ class SentimentAnalyzer:
             config: Sentiment configuration (uses defaults if None)
         """
         self.config = config or SentimentConfig()
+        # Store RAW scores for accurate ROC calculation (BUG-006 fix)
+        self._historical_raw_scores: dict[str, list[float]] = {}
+        # Store smoothed scores for historical tracking
         self._historical_scores: dict[str, list[float]] = {}
         self._historical_timestamps: dict[str, list[datetime]] = {}
+        # BUG-016: Thread safety lock for concurrent access to historical scores
+        self._lock = threading.Lock()
 
     def normalize_sentiment(
         self, raw_sentiment: float, min_val: float = -1.0, max_val: float = 1.0
@@ -154,7 +173,12 @@ class SentimentAnalyzer:
         """
         Apply EMA smoothing to sentiment score.
 
-        S_smoothed[t] = α * S_total[t] + (1-α) * S_smoothed[t-1]
+        S_smoothed[t] = alpha * S_total[t] + (1-alpha) * S_smoothed[t-1]
+
+        Note (BUG-006 fix): Raw scores are stored separately from smoothed scores.
+        This prevents "double-smoothing" when computing rate of change (ROC).
+        The ROC is calculated from smoothed scores, but raw scores are preserved
+        for potential future analysis and debugging.
 
         Args:
             current_score: Current sentiment score
@@ -169,26 +193,33 @@ class SentimentAnalyzer:
 
         alpha = self.config.ema_alpha
 
-        # Initialize historical data if needed
-        if symbol not in self._historical_scores:
-            self._historical_scores[symbol] = [current_score]
-            self._historical_timestamps[symbol] = [timestamp]
-            return current_score
+        # BUG-016: Use lock for thread-safe access to historical scores
+        with self._lock:
+            # Initialize historical data if needed
+            if symbol not in self._historical_scores:
+                # First observation: both raw and smoothed are the same
+                self._historical_raw_scores[symbol] = [current_score]
+                self._historical_scores[symbol] = [current_score]
+                self._historical_timestamps[symbol] = [timestamp]
+                return current_score
 
-        historical = self._historical_scores[symbol]
-        prev_smoothed = historical[-1]
+            # Get previous smoothed value for EMA calculation
+            prev_smoothed = self._historical_scores[symbol][-1]
 
-        # Calculate smoothed value
-        smoothed = alpha * current_score + (1 - alpha) * prev_smoothed
+            # Calculate smoothed value using EMA formula
+            smoothed = alpha * current_score + (1 - alpha) * prev_smoothed
 
-        # Store in history
-        self._historical_scores[symbol].append(smoothed)
-        self._historical_timestamps[symbol].append(timestamp)
+            # Store RAW score separately (BUG-006 fix: prevents double-smoothed ROC)
+            self._historical_raw_scores[symbol].append(current_score)
+            # Store smoothed value for historical tracking and ROC calculation
+            self._historical_scores[symbol].append(smoothed)
+            self._historical_timestamps[symbol].append(timestamp)
 
-        # Keep only last 100 data points
-        if len(self._historical_scores[symbol]) > 100:
-            self._historical_scores[symbol] = self._historical_scores[symbol][-100:]
-            self._historical_timestamps[symbol] = self._historical_timestamps[symbol][-100:]
+            # Keep only last 100 data points
+            if len(self._historical_scores[symbol]) > 100:
+                self._historical_raw_scores[symbol] = self._historical_raw_scores[symbol][-100:]
+                self._historical_scores[symbol] = self._historical_scores[symbol][-100:]
+                self._historical_timestamps[symbol] = self._historical_timestamps[symbol][-100:]
 
         return smoothed
 
@@ -204,11 +235,13 @@ class SentimentAnalyzer:
         Returns:
             Rate of change
         """
-        if symbol not in self._historical_scores or len(self._historical_scores[symbol]) < 2:
-            return 0.0
+        # BUG-016: Use lock for thread-safe access to historical scores
+        with self._lock:
+            if symbol not in self._historical_scores or len(self._historical_scores[symbol]) < 2:
+                return 0.0
 
-        current = self._historical_scores[symbol][-1]
-        previous = self._historical_scores[symbol][-2]
+            current = self._historical_scores[symbol][-1]
+            previous = self._historical_scores[symbol][-2]
 
         return current - previous
 
@@ -317,13 +350,15 @@ class SentimentAnalyzer:
         Returns:
             DataFrame with columns [timestamp, score]
         """
-        if symbol not in self._historical_scores:
-            return pd.DataFrame(columns=["timestamp", "score"])
+        # BUG-016: Use lock for thread-safe access to historical scores
+        with self._lock:
+            if symbol not in self._historical_scores:
+                return pd.DataFrame(columns=["timestamp", "score"])
 
-        timestamps = self._historical_timestamps[symbol]
-        scores = self._historical_scores[symbol]
+            timestamps = self._historical_timestamps[symbol]
+            scores = self._historical_scores[symbol]
 
-        df = pd.DataFrame({"timestamp": timestamps, "score": scores})
+            df = pd.DataFrame({"timestamp": timestamps, "score": scores})
 
         if start_date:
             df = df[df["timestamp"] >= start_date]
@@ -331,6 +366,11 @@ class SentimentAnalyzer:
             df = df[df["timestamp"] <= end_date]
 
         return df.reset_index(drop=True)
+
+    # BUG-019: Minimum std dev threshold for z-score calculation
+    # When std dev is very small, z-scores become unreliable and can produce
+    # extremely large values. We use a minimum threshold to handle this case.
+    MIN_STD_FOR_ZSCORE: float = 0.01
 
     def calculate_sentiment_stats(self, symbol: str, window: int = 30) -> dict[str, float]:
         """
@@ -343,13 +383,37 @@ class SentimentAnalyzer:
         Returns:
             Dict with stats (mean, std, min, max, etc.)
         """
-        if symbol not in self._historical_scores:
-            return {}
+        # BUG-016: Use lock for thread-safe access to historical scores
+        with self._lock:
+            if symbol not in self._historical_scores:
+                return {}
 
-        scores = self._historical_scores[symbol][-window:]
+            scores = self._historical_scores[symbol][-window:]
 
-        if len(scores) == 0:
-            return {}
+            if len(scores) == 0:
+                return {}
+
+        # Calculate z-score with proper handling for near-zero std dev (BUG-019 fix)
+        z_score = 0.0
+        if len(scores) > 1:
+            mean_excl_current = np.mean(scores[:-1])
+            std_excl_current = np.std(scores[:-1])
+
+            # BUG-019 fix: Handle near-zero std dev properly
+            # When std dev is below threshold, the z-score is unreliable.
+            # We return 0.0 z-score to indicate "normal" (not extreme) sentiment.
+            if std_excl_current < self.MIN_STD_FOR_ZSCORE:
+                # Log warning about low variance
+                logger.warning(
+                    "Low variance in sentiment scores for %s: std=%.6f < %.6f. "
+                    "Z-score set to 0.0 (neutral).",
+                    symbol,
+                    std_excl_current,
+                    self.MIN_STD_FOR_ZSCORE,
+                )
+                z_score = 0.0
+            else:
+                z_score = (scores[-1] - mean_excl_current) / std_excl_current
 
         return {
             "mean": np.mean(scores),
@@ -357,22 +421,63 @@ class SentimentAnalyzer:
             "min": np.min(scores),
             "max": np.max(scores),
             "current": scores[-1],
-            "z_score": (scores[-1] - np.mean(scores[:-1])) / (np.std(scores[:-1]) + 1e-8)
-            if len(scores) > 1
-            else 0.0,
+            "z_score": z_score,
         }
 
     def is_sentiment_extreme(self, symbol: str, threshold_std: float = 1.5) -> tuple[bool, float]:
         """
         Check if current sentiment is extreme (deviation from mean).
 
+        BUG-005 fix: This method now handles the "cold start" problem where
+        there isn't enough historical data for reliable z-score calculation.
+
+        Fallback behavior:
+        - If fewer than min_observations_for_stats observations: Use absolute threshold
+          on the raw sentiment score instead of z-score.
+        - Log a warning when using fallback mode.
+
         Args:
             symbol: Stock symbol
-            threshold_std: Threshold in standard deviations
+            threshold_std: Threshold in standard deviations (for normal mode)
+                           or absolute threshold (for fallback mode)
 
         Returns:
-            (is_extreme, z_score)
+            Tuple of (is_extreme, z_score_or_fallback_value)
+            - In normal mode: z_score is the actual z-score
+            - In fallback mode: z_score is the absolute value of the raw score
         """
+        # BUG-016: Use lock for thread-safe access to historical scores
+        with self._lock:
+            # Check if we have any historical data at all
+            if symbol not in self._historical_scores:
+                logger.warning(
+                    "No historical data for %s, cannot determine if sentiment is extreme",
+                    symbol,
+                )
+                return False, 0.0
+
+            scores = self._historical_scores[symbol]
+            num_observations = len(scores)
+
+            # BUG-005 fix: Cold start fallback
+            # If we don't have enough observations for reliable statistics,
+            # use a simpler threshold-based check on the raw sentiment score.
+            if num_observations < self.config.min_observations_for_stats:
+                logger.warning(
+                    "Cold start fallback for %s: only %d observations (need %d). "
+                    "Using absolute threshold %.2f on raw score.",
+                    symbol,
+                    num_observations,
+                    self.config.min_observations_for_stats,
+                    self.config.fallback_threshold_abs,
+                )
+                # Use the current (smoothed) score with absolute threshold
+                current_score = scores[-1]
+                is_extreme = abs(current_score) >= self.config.fallback_threshold_abs
+                # Return the absolute score value as the "z-score" for consistency
+                return is_extreme, abs(current_score)
+
+        # Normal mode: use z-score calculation
         stats = self.calculate_sentiment_stats(symbol, window=30)
 
         if not stats:
@@ -434,7 +539,7 @@ class SentimentDataParser:
     @staticmethod
     def parse_social_media_sentiment(posts: list[dict]) -> list[SentimentSource]:
         """
-        Parse social media (Weibo, 东方财富股吧) sentiment.
+        Parse social media (Weibo, Dongfang Caifu Guba) sentiment.
 
         Args:
             posts: List of post dicts
@@ -541,6 +646,29 @@ def load_config(config_path: str) -> SentimentConfig:
     """
     Load sentiment configuration from JSON file.
 
+    The config file has a nested structure with sentiment settings under
+    the "sentiment" key. This function parses the nested structure correctly.
+
+    Expected config.json structure:
+    {
+        "sentiment": {
+            "weights": {
+                "news": 0.40,
+                "social": 0.35,
+                "search": 0.15,
+                "forum": 0.10
+            },
+            "ema_alpha": 0.2,
+            "roc_threshold": 1.0,
+            "min_score": -5.0,
+            "max_score": 5.0,
+            "extreme_bearish": -3.0,
+            "bearish": -1.5,
+            "bullish": 1.5,
+            "extreme_bullish": 3.0
+        }
+    }
+
     Args:
         config_path: Path to config JSON file
 
@@ -550,8 +678,32 @@ def load_config(config_path: str) -> SentimentConfig:
     with open(config_path) as f:
         config_dict = json.load(f)
 
-    # Convert to correct types
-    return SentimentConfig(**config_dict)
+    # Parse nested structure
+    if "sentiment" in config_dict:
+        sentiment_config = config_dict["sentiment"]
+    else:
+        # Fallback: assume flat structure for backward compatibility
+        sentiment_config = config_dict
+
+    # Extract weights from nested structure
+    weights = sentiment_config.get("weights", {})
+
+    return SentimentConfig(
+        news_weight=weights.get("news", 0.40),
+        social_weight=weights.get("social", 0.35),
+        search_weight=weights.get("search", 0.15),
+        forum_weight=weights.get("forum", 0.10),
+        ema_alpha=sentiment_config.get("ema_alpha", 0.2),
+        roc_threshold=sentiment_config.get("roc_threshold", 1.0),
+        min_score=sentiment_config.get("min_score", -5.0),
+        max_score=sentiment_config.get("max_score", 5.0),
+        extreme_bearish=sentiment_config.get("extreme_bearish", -3.0),
+        bearish=sentiment_config.get("bearish", -1.5),
+        bullish=sentiment_config.get("bullish", 1.5),
+        extreme_bullish=sentiment_config.get("extreme_bullish", 3.0),
+        min_observations_for_stats=sentiment_config.get("min_observations_for_stats", 10),
+        fallback_threshold_abs=sentiment_config.get("fallback_threshold_abs", 2.0),
+    )
 
 
 # Example usage and testing
@@ -614,4 +766,4 @@ if __name__ == "__main__":
     print("\nSignals:")
     for signal, value in result.signals.items():
         if value:
-            print(f"  ✓ {signal}")
+            print(f"  [OK] {signal}")

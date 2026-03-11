@@ -25,6 +25,8 @@ Usage:
     signal = signal_generator.generate_signal(symbol, price, sentiment, valuation)
 """
 
+from common.types import Position, TradingSignal
+
 from .sentiment import (
     SentimentAnalyzer,
     SentimentConfig,
@@ -33,7 +35,7 @@ from .sentiment import (
     SentimentSource,
 )
 from .sentiment import load_config as load_sentiment_config
-from .signals import Position, SignalConfig, SignalGenerator, TradingSignal
+from .signals import InternalPosition, SignalConfig, SignalGenerator
 from .signals import load_config as load_signal_config
 from .valuation import (
     SectorMetrics,
@@ -65,5 +67,6 @@ __all__ = [
     "SignalConfig",
     "TradingSignal",
     "Position",
+    "InternalPosition",
     "load_signal_config",
 ]
