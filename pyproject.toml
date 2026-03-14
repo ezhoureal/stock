@@ -88,6 +88,10 @@ line-length = 100
 target-version = ["py313"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "broker/python", "examples", "sentiment_strategy/tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+addopts = ["--ignore=high_freq_sentiment"]
+filterwarnings = [
+    "ignore::pytest.PytestCollectionWarning",
+]

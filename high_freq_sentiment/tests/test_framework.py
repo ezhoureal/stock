@@ -18,31 +18,46 @@ import warnings
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
-import cupy as cp
 import numpy as np
+import pytest
+
+# CuPy is required for GPU-accelerated tests
+try:
+    import cupy as cp
+    CUPY_AVAILABLE = True
+except ImportError:
+    CUPY_AVAILABLE = False
+    cp = None
+
+# Skip all tests in this module if CuPy is not available
+pytestmark = pytest.mark.skipif(
+    not CUPY_AVAILABLE,
+    reason="CuPy not installed - GPU-dependent tests skipped"
+)
 
 warnings.filterwarnings("ignore")
 
-# Import modules to test
-from echo_chamber import (
-    EchoChamberEliminator,
-    MarketSentimentOrthogonalizer,
-    OrthogonalizationConfig,
-    PCAOrthogonalizer,
-)
-from kalman_filter import SquareRootKalmanFilter, VectorizedKalmanFilterBank
-from signal_generation import (
-    SignalConfig,
-    SignalGenerator,
-    SignalType,
-)
-from z_scoring import (
-    CrossSectionalZScorer,
-    ExponentialZScorer,
-    RollingZScorer,
-    VectorizedZScoreLayer,
-    ZScoreConfig,
-)
+# Import modules to test - skip if dependencies not available
+if CUPY_AVAILABLE:
+    from echo_chamber import (
+        EchoChamberEliminator,
+        MarketSentimentOrthogonalizer,
+        OrthogonalizationConfig,
+        PCAOrthogonalizer,
+    )
+    from kalman_filter import SquareRootKalmanFilter, VectorizedKalmanFilterBank
+    from signal_generation import (
+        SignalConfig,
+        SignalGenerator,
+        SignalType,
+    )
+    from z_scoring import (
+        CrossSectionalZScorer,
+        ExponentialZScorer,
+        RollingZScorer,
+        VectorizedZScoreLayer,
+        ZScoreConfig,
+    )
 
 
 @dataclass
