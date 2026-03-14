@@ -148,6 +148,23 @@ def main():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """,
+        "sectors": """
+            CREATE TABLE IF NOT EXISTS sectors (
+                id INTEGER PRIMARY KEY,
+                sector_code VARCHAR(20) UNIQUE,
+                sector_name VARCHAR(100),
+                sector_level INTEGER,
+                parent_code VARCHAR(20),
+                constituent_count INTEGER,
+                pe_ratio DECIMAL(10,4),
+                pb_ratio DECIMAL(10,4),
+                dividend_yield DECIMAL(10,4),
+                avg_market_cap DECIMAL(20,2),
+                report_date DATE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """,
     }
 
     indexes = {
@@ -163,6 +180,8 @@ def main():
         "idx_news_source": "CREATE INDEX IF NOT EXISTS idx_news_source ON news_raw(source);",
         "idx_csi300_stock": "CREATE INDEX IF NOT EXISTS idx_csi300_stock ON csi300_history(stock_id);",
         "idx_csi300_date": "CREATE INDEX IF NOT EXISTS idx_csi300_date ON csi300_history(entry_date);",
+        "idx_sectors_code": "CREATE INDEX IF NOT EXISTS idx_sectors_code ON sectors(sector_code);",
+        "idx_sectors_level": "CREATE INDEX IF NOT EXISTS idx_sectors_level ON sectors(sector_level);",
     }
 
     # Create tables
