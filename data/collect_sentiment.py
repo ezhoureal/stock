@@ -160,6 +160,11 @@ class AKShareSentimentConfig:
     # Cache settings
     cache_ttl_seconds: int = 300
 
+    # Rate limiting (to avoid triggering anti-bot protection)
+    request_delay_seconds: float = 0.3  # Delay between API calls
+    max_retries: int = 3  # Max retries on connection errors
+    retry_delay_seconds: float = 1.0  # Base delay for retries
+
 
 # ============================================================================
 # AKShare Sentiment Fetcher
@@ -191,6 +196,10 @@ class AKShareSentimentFetcher:
         self._lock = threading.Lock()
         self.logger = logger
 
+        # Rate limiting state
+        self._last_request_time: float = 0.0
+        self._request_count: int = 0
+
     def _get_cached(self, key: str) -> Any | None:
         """Get cached data if still valid."""
         with self._lock:
@@ -205,6 +214,71 @@ class AKShareSentimentFetcher:
         """Cache data with current timestamp."""
         with self._lock:
             self._cache[key] = (datetime.now(), data)
+
+    def _rate_limit(self) -> None:
+        """Enforce minimum delay between API requests to avoid rate limiting."""
+        import time
+
+        with self._lock:
+            elapsed = time.time() - self._last_request_time
+            delay = self.config.request_delay_seconds
+            if elapsed < delay:
+                time.sleep(delay - elapsed)
+            self._last_request_time = time.time()
+            self._request_count += 1
+
+    def _retry_with_backoff(self, func: callable, *args, **kwargs) -> Any:
+        """
+        Execute function with exponential backoff retry for connection errors.
+
+        Args:
+            func: Function to execute
+            *args, **kwargs: Arguments to pass to function
+
+        Returns:
+            Function result
+
+        Raises:
+            Exception: After max retries exceeded
+        """
+        import time
+
+        max_retries = self.config.max_retries
+        base_delay = self.config.retry_delay_seconds
+
+        for attempt in range(max_retries):
+            try:
+                self._rate_limit()
+                return func(*args, **kwargs)
+            except Exception as e:
+                error_msg = str(e).lower()
+                # Check if it's a connection/proxy error
+                is_connection_error = any(
+                    keyword in error_msg
+                    for keyword in [
+                        "proxy",
+                        "connection",
+                        "remotedisconnected",
+                        "max retries exceeded",
+                        "timeout",
+                    ]
+                )
+
+                if not is_connection_error or attempt == max_retries - 1:
+                    raise
+
+                # Exponential backoff with jitter
+                delay = base_delay * (2**attempt) + (hash(str(args)) % 10) / 10
+                self.logger.warning(
+                    "Request failed (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                    e,
+                )
+                time.sleep(delay)
+
+        return None  # Should never reach here
 
     # ==================== Hot Rank Data ====================
 
@@ -339,7 +413,7 @@ class AKShareSentimentFetcher:
     # ==================== Fund Flow Data ====================
 
     def get_fund_flow_data(self, symbol: str, market: str = "auto") -> pd.DataFrame | None:
-        """Fetch individual stock fund flow data."""
+        """Fetch individual stock fund flow data with rate limiting and retries."""
         code = symbol.replace("SH", "").replace("SZ", "").replace("BJ", "")
 
         if market == "auto":
@@ -358,11 +432,11 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
-            df = ak.stock_individual_fund_flow(stock=code, market=market)
+            df = self._retry_with_backoff(ak.stock_individual_fund_flow, stock=code, market=market)
             self._set_cache(cache_key, df)
             return df
         except Exception as e:
-            self.logger.error("Failed to fetch fund flow data for %s: %s", symbol, e)
+            self.logger.debug("Failed to fetch fund flow data for %s: %s", symbol, e)
             return None
 
     def get_fund_flow_sentiment(self, symbol: str) -> SentimentDataPoint | None:
@@ -417,7 +491,7 @@ class AKShareSentimentFetcher:
     # ==================== Northbound Capital Data ====================
 
     def get_northbound_data(self, symbol: str) -> pd.DataFrame | None:
-        """Fetch northbound capital holdings data for a stock."""
+        """Fetch northbound capital holdings data for a stock with rate limiting."""
         code = symbol.replace("SH", "").replace("SZ", "").replace("BJ", "")
 
         cache_key = f"northbound_{code}"
@@ -426,11 +500,11 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
-            df = ak.stock_hsgt_individual_em(symbol=code)
+            df = self._retry_with_backoff(ak.stock_hsgt_individual_em, symbol=code)
             self._set_cache(cache_key, df)
             return df
         except Exception as e:
-            self.logger.error("Failed to fetch northbound data for %s: %s", symbol, e)
+            self.logger.debug("Failed to fetch northbound data for %s: %s", symbol, e)
             return None
 
     def get_northbound_sentiment(self, symbol: str) -> SentimentDataPoint | None:
@@ -487,18 +561,18 @@ class AKShareSentimentFetcher:
     # ==================== Long Hub Data ====================
 
     def get_long_hub_stock_stats(self, period: str = "近一月") -> pd.DataFrame | None:
-        """Fetch Long Hub statistics."""
+        """Fetch Long Hub statistics with rate limiting."""
         cache_key = f"long_hub_stats_{period}"
         cached = self._get_cached(cache_key)
         if cached is not None:
             return cached
 
         try:
-            df = ak.stock_lhb_stock_statistic_em(symbol=period)
+            df = self._retry_with_backoff(ak.stock_lhb_stock_statistic_em, symbol=period)
             self._set_cache(cache_key, df)
             return df
         except Exception as e:
-            self.logger.error("Failed to fetch Long Hub data: %s", e)
+            self.logger.debug("Failed to fetch Long Hub data: %s", e)
             return None
 
     def get_long_hub_sentiment(self, symbol: str) -> SentimentDataPoint | None:
@@ -676,20 +750,36 @@ class AKShareSentimentFetcher:
     # ==================== Composite Sentiment ====================
 
     def get_composite_sentiment(
-        self, symbol: str, include_market: bool = True
+        self, symbol: str, include_market: bool = True, lightweight: bool = False
     ) -> tuple[float, dict[str, SentimentDataPoint]]:
-        """Calculate composite sentiment for a stock from all sources."""
+        """
+        Calculate composite sentiment for a stock from all sources.
+
+        Args:
+            symbol: Stock symbol
+            include_market: Include market-wide sentiment sources
+            lightweight: If True, skip per-stock API calls (fund_flow, northbound)
+                        Useful for large batches to avoid rate limiting
+        """
         data_points: dict[str, SentimentDataPoint] = {}
         weighted_sum = 0.0
         total_weight = 0.0
 
+        # Batched sources (efficient - single API call for all stocks)
         sources = [
             ("hot_rank", self.get_hot_rank_sentiment, self.config.hot_rank_weight),
             ("stock_comment", self.get_stock_comment_sentiment, self.config.comment_weight),
-            ("fund_flow", self.get_fund_flow_sentiment, self.config.fund_flow_weight),
-            ("northbound", self.get_northbound_sentiment, self.config.northbound_weight),
             ("long_hub", self.get_long_hub_sentiment, self.config.long_hub_weight),
         ]
+
+        # Per-stock sources (expensive - one API call per stock)
+        if not lightweight:
+            sources.extend(
+                [
+                    ("fund_flow", self.get_fund_flow_sentiment, self.config.fund_flow_weight),
+                    ("northbound", self.get_northbound_sentiment, self.config.northbound_weight),
+                ]
+            )
 
         for source_name, fetcher, weight in sources:
             try:

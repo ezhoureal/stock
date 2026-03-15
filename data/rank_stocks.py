@@ -131,8 +131,20 @@ def get_sentiment_scores(
     Returns:
         Dict mapping stock_id to sentiment score (-1 to 1)
     """
+
     sentiment_scores = {}
     total = len(stocks_df)
+
+    # Use lightweight mode for large batches to avoid rate limiting
+    # Lightweight mode skips per-stock API calls (fund_flow, northbound)
+    is_large_batch = total > 500
+    lightweight = is_large_batch
+
+    if is_large_batch:
+        logger.info(
+            f"Large batch detected ({total} stocks). "
+            "Using lightweight mode (skipping per-stock fund flow & northbound data)..."
+        )
 
     for idx, row in stocks_df.iterrows():
         stock_id = row["stock_id"]
@@ -140,7 +152,9 @@ def get_sentiment_scores(
             logger.info(f"Fetching sentiment: {idx + 1}/{total} stocks...")
 
         try:
-            composite, _ = fetcher.get_composite_sentiment(stock_id, include_market=False)
+            composite, _ = fetcher.get_composite_sentiment(
+                stock_id, include_market=False, lightweight=lightweight
+            )
             # Normalize composite to -1 to 1 range (composite can be -2 to 2)
             normalized = np.clip(composite / 2.0, -1.0, 1.0)
             sentiment_scores[stock_id] = normalized
