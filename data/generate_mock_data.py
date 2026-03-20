@@ -8,11 +8,12 @@ This allows strategy testing without waiting for data issues to resolve.
 
 import random
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import duckdb
 import numpy as np
 
-DB_PATH = "/home/zireael/trade/stocks/data/stocks.duckdb"
+DB_PATH = Path(__file__).parent / "stocks.duckdb"
 
 
 def generate_random_walk(start_price: float, days: int, volatility: float = 0.02) -> list[float]:

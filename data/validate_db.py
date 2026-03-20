@@ -14,13 +14,17 @@ import logging
 import sys
 import traceback
 from datetime import datetime
+from pathlib import Path
 
 # Configure logging
+_LOG_DIR = Path(__file__).parent / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("/home/zireael/trade/stocks/data/logs/db_validation.log"),
+        logging.FileHandler(_LOG_DIR / "db_validation.log"),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -55,13 +59,16 @@ class DatabaseValidator:
     Validates data quality in the sentiment arbitrage database.
     """
 
-    def __init__(self, config_path: str = "/home/zireael/trade/stocks/data/config.json"):
+    def __init__(self, config_path: str | None = None):
         """
         Initialize the database validator.
 
         Args:
-            config_path: Path to configuration file
+            config_path: Path to configuration file (default: data/config.json)
         """
+        if config_path is None:
+            config_path = str(Path(__file__).parent / "config.json")
+
         self.config = self._load_config(config_path)
         self.db_path = self.config["database"]["path"]
         self.conn = None
@@ -73,7 +80,7 @@ class DatabaseValidator:
             with open(config_path) as f:
                 return json.load(f)
         except Exception as e:
-            self.logger.error(f"Failed to load config: {e}")
+            logger.error(f"Failed to load config: {e}")
             raise
 
     def _connect_database(self):

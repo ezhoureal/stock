@@ -7,9 +7,10 @@ Usage:
 """
 
 import json
+from pathlib import Path
 
-# Load configuration
-CONFIG_PATH = "/home/zireael/trade/stocks/data/config.json"
+# Load configuration from relative path
+CONFIG_PATH = Path(__file__).parent / "config.json"
 
 
 def load_config():

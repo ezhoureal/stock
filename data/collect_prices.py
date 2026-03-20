@@ -21,11 +21,14 @@ from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Configure logging
+_LOG_DIR = Path(__file__).parent / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("/home/zireael/trade/stocks/data/logs/price_collection.log"),
+        logging.FileHandler(_LOG_DIR / "price_collection.log"),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -61,13 +64,16 @@ class PriceCollector:
     Robust price data collector with multiple source support and automatic fallback.
     """
 
-    def __init__(self, config_path: str = "/home/zireael/trade/stocks/data/config.json"):
+    def __init__(self, config_path: str | None = None):
         """
         Initialize the price collector.
 
         Args:
-            config_path: Path to configuration file
+            config_path: Path to configuration file (default: data/config.json)
         """
+        if config_path is None:
+            config_path = str(Path(__file__).parent / "config.json")
+
         self.config = self._load_config(config_path)
         self.db_path = self.config["database"]["path"]
         self.logger = logger

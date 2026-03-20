@@ -1,7 +1,7 @@
 {
   "database": {
-    "path": "/home/zireael/trade/stocks/data/stocks.duckdb",
-    "export_dir": "/home/zireael/trade/stocks/data/exports"
+    "path": "data/stocks.duckdb",
+    "export_dir": "data/exports"
   },
   "data_collection": {
     "primary_source": "akshare",
@@ -10,7 +10,7 @@
     "csi300_index": "000300"
   },
   "logging": {
-    "log_dir": "/home/zireael/trade/stocks/data/logs",
+    "log_dir": "data/logs",
     "log_level": "INFO"
   },
   "sentiment": {

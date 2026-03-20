@@ -827,10 +827,16 @@ class SentimentCollector:
     Supports both news article collection and AKShare market sentiment.
     """
 
-    def __init__(self, config_path: str = "/home/zireael/trade/stocks/data/config.json"):
+    def __init__(self, config_path: str | None = None):
+        # Set logger first to avoid AttributeError during config loading
+        self.logger = logger
+
+        # Default to relative path from repo root
+        if config_path is None:
+            config_path = str(Path(__file__).parent / "config.json")
+
         self.config = self._load_config(config_path)
         self.db_path = self.config["database"]["path"]
-        self.logger = logger
 
         # HTTP session for requests
         self.session = None
@@ -886,7 +892,7 @@ class SentimentCollector:
             with open(config_path) as f:
                 return json.load(f)
         except Exception as e:
-            self.logger.error(f"Failed to load config: {e}")
+            logger.error(f"Failed to load config: {e}")
             raise SentimentCollectionError(f"Config load failed: {e}") from e
 
     def _init_session(self):
@@ -1244,24 +1250,33 @@ class SentimentCollector:
         try:
             conn.execute("BEGIN TRANSACTION")
 
+            # Get next ID
+            max_id_result = conn.execute("SELECT COALESCE(MAX(id), 0) FROM sentiment_scores").fetchone()
+            next_id = max_id_result[0] + 1 if max_id_result else 1
+
             for symbol, data in sentiment_data.items():
                 if "error" in data:
                     continue
 
-                # Save composite sentiment
+                # Save composite sentiment - use stock_id column
+                from datetime import datetime
+                sentiment_ts = datetime.fromisoformat(data["timestamp"])
+                sentiment_date = sentiment_ts.date()
                 conn.execute(
                     """
                     INSERT INTO sentiment_scores
-                    (symbol, timestamp, composite_score, source_data, created_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (id, stock_id, timestamp, sentiment_date, overall_score, source, created_at)
+                    VALUES (?, ?, ?, ?, ?, 'akshare', CURRENT_TIMESTAMP)
                     """,
                     [
+                        next_id,
                         symbol,
-                        data["timestamp"],
+                        sentiment_ts,
+                        sentiment_date,
                         data["composite_sentiment"],
-                        json.dumps(data["sources"]),
                     ],
                 )
+                next_id += 1
                 inserted_count += 1
 
             conn.execute("COMMIT")
@@ -1487,6 +1502,12 @@ def main():
         help="Comma-separated list of symbols for AKShare collection",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config.json (default: data/config.json)",
+    )
 
     args = parser.parse_args()
 
@@ -1499,7 +1520,7 @@ def main():
         symbols = [s.strip() for s in args.symbols.split(",")]
 
     try:
-        collector = SentimentCollector()
+        collector = SentimentCollector(config_path=args.config)
 
         collector.collect_sentiment(
             source=args.source,
