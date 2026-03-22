@@ -46,5 +46,15 @@
   "storage": {
     "retention_days": 365,
     "compress_raw_data": true
+  },
+  "valuation": {
+    "weights": {
+      "PE": 0.60,
+      "PB": 0.40
+    },
+    "deeply_undervalued": 0.30,
+    "undervalued": 0.10,
+    "overvalued": -0.10,
+    "deeply_overvalued": -0.30
   }
 }

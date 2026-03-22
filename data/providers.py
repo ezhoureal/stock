@@ -1,8 +1,8 @@
 """
-Sentiment data providers using AKShare APIs.
+Data providers using AKShare APIs.
 
-Derives sentiment scores from market behavior proxies since direct
-sentiment APIs are not available for Chinese A-shares.
+Includes sentiment data providers (derived from market behavior proxies)
+and valuation data providers (on-demand PE/PB ratios with per-industry normalization).
 """
 
 from __future__ import annotations
@@ -14,6 +14,12 @@ import akshare as ak
 import pandas as pd
 
 from common.types import SentimentScore
+from sentiment_strategy.valuation import (
+    SectorMetrics,
+    ValuationCalculator,
+    ValuationConfig,
+    ValuationMetrics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -549,3 +555,278 @@ class SentimentDataProvider:
 
         logger.info(f"Generated {len(all_scores)} total sentiment scores")
         return all_scores
+
+
+class ValuationDataProvider:
+    """
+    Provides valuation metrics from AKShare with per-industry normalization.
+
+    Fetches PE/PB ratios on-demand from stock_zh_a_spot_em() API, which returns
+    data for ALL A-shares in a single call. Uses per-industry normalization to
+    calculate V scores since different sectors have drastically different
+    valuation levels.
+    """
+
+    def __init__(self, config: dict | None = None) -> None:
+        """
+        Initialize the valuation data provider.
+
+        Args:
+            config: Configuration dict (optional). May contain valuation weights.
+        """
+        self.config = config or {}
+        # Initialize valuation calculator with config weights if provided
+        val_config = None
+        if "valuation" in self.config:
+            val_dict = self.config["valuation"]
+            weights = val_dict.get("weights", {})
+            val_config = ValuationConfig(
+                pe_weight=weights.get("PE", 0.60),
+                pb_weight=weights.get("PB", 0.40),
+                dividend_weight=0.0,  # Not available from batch API
+                peg_weight=0.0,  # Not available from batch API
+                deeply_undervalued=val_dict.get("deeply_undervalued", 0.30),
+                undervalued=val_dict.get("undervalued", 0.10),
+                overvalued=val_dict.get("overvalued", -0.10),
+                deeply_overvalued=val_dict.get("deeply_overvalued", -0.30),
+            )
+        self.calculator = ValuationCalculator(val_config)
+
+    def get_stock_industry_map(self) -> dict[str, str]:
+        """
+        Fetch stock-to-industry mapping using stock_industry_category_cninfo.
+
+        Returns:
+            Dictionary mapping symbol to industry name.
+            Example: {"600519": "食品饮料", "000858": "家用电器"}
+        """
+        try:
+            df = ak.stock_industry_category_cninfo()
+            logger.info(f"Fetched {len(df)} stock-industry mappings")
+
+            # Build mapping from symbol to industry
+            industry_map: dict[str, str] = {}
+            for _, row in df.iterrows():
+                symbol = str(row.get("股票代码", ""))
+                industry = str(row.get("行业名称", ""))
+                if symbol and symbol != "nan" and industry and industry != "nan":
+                    industry_map[symbol] = industry
+
+            logger.info(f"Mapped {len(industry_map)} symbols to industries")
+            return industry_map
+        except Exception as e:
+            logger.error(f"Error fetching industry mapping: {e}")
+            return {}
+
+    def get_valuation_metrics(self, symbols: list[str] | None = None) -> pd.DataFrame:
+        """
+        Fetch PE/PB for all A-shares from stock_zh_a_spot_em().
+
+        This API returns 5000+ stocks in a single call with:
+        - 代码: Stock symbol
+        - 名称: Stock name
+        - 市盈率-动态: PE ratio (TTM)
+        - 市净率: PB ratio
+
+        Note: The symbols parameter is accepted for API consistency but is not
+        used since the API returns all stocks in one call.
+
+        Args:
+            symbols: Optional list of symbols (ignored, API returns all stocks)
+
+        Returns:
+            DataFrame with columns: symbol, name, pe_ratio, pb_ratio
+        """
+        try:
+            df = ak.stock_zh_a_spot_em()
+            logger.info(f"Fetched {len(df)} spot records")
+
+            # Extract relevant columns
+            result = []
+            for _, row in df.iterrows():
+                symbol = str(row.get("代码", ""))
+                name = str(row.get("名称", ""))
+                pe_ratio = row.get("市盈率-动态", None)
+                pb_ratio = row.get("市净率", None)
+
+                if symbol and symbol != "nan":
+                    # Convert to float, handling invalid values
+                    pe: float | None = None
+                    pb: float | None = None
+                    if pe_ratio not in [None, "", "-"]:
+                        try:
+                            pe = float(pe_ratio)  # type: ignore[arg-type]
+                        except (ValueError, TypeError):
+                            pe = None
+                    if pb_ratio not in [None, "", "-"]:
+                        try:
+                            pb = float(pb_ratio)  # type: ignore[arg-type]
+                        except (ValueError, TypeError):
+                            pb = None
+
+                    result.append(
+                        {
+                            "symbol": symbol,
+                            "name": name,
+                            "pe_ratio": pe,
+                            "pb_ratio": pb,
+                        }
+                    )
+
+            result_df = pd.DataFrame(result)
+            logger.info(f"Extracted valuation metrics for {len(result_df)} symbols")
+            return result_df
+        except Exception as e:
+            logger.error(f"Error fetching valuation metrics: {e}")
+            return pd.DataFrame()
+
+    def calculate_v_scores(self, symbols: list[str]) -> dict[str, float]:
+        """
+        Calculate V scores with per-industry normalization.
+
+        Process:
+        1. Fetch valuation metrics for ALL stocks (needed for sector medians)
+        2. Get industry mapping
+        3. Calculate median PE/PB per industry
+        4. Compute V scores using ValuationCalculator
+
+        Args:
+            symbols: List of stock symbols to calculate V scores for
+
+        Returns:
+            Dictionary mapping symbol to V score.
+            Example: {"600519": 0.15, "000858": -0.05}
+        """
+        if not symbols:
+            return {}
+
+        # Fetch valuation metrics for all stocks
+        metrics_df = self.get_valuation_metrics()
+        if metrics_df.empty:
+            logger.warning("No valuation metrics available")
+            return {}
+
+        # Get industry mapping
+        industry_map = self.get_stock_industry_map()
+        if not industry_map:
+            logger.warning("No industry mapping available")
+
+        # Add industry to metrics
+        metrics_df["industry"] = metrics_df["symbol"].map(industry_map)  # type: ignore[arg-type]
+
+        # Calculate sector medians
+        industry_medians: dict[str, dict[str, float]] = {}
+        for industry in metrics_df["industry"].dropna().unique():  # type: ignore[attr-defined]
+            industry_data = metrics_df[metrics_df["industry"] == industry]
+
+            # Calculate median PE/PB for this industry
+            valid_pe = industry_data["pe_ratio"].dropna()  # type: ignore[attr-defined]
+            valid_pb = industry_data["pb_ratio"].dropna()  # type: ignore[attr-defined]
+
+            if not valid_pe.empty and not valid_pb.empty:
+                industry_medians[industry] = {
+                    "pe_ratio": float(valid_pe.median()),
+                    "pb_ratio": float(valid_pb.median()),
+                }
+
+        logger.info(f"Calculated medians for {len(industry_medians)} industries")
+
+        # Calculate V scores for requested symbols
+        v_scores: dict[str, float] = {}
+        for symbol in symbols:
+            try:
+                symbol_data = metrics_df[metrics_df["symbol"] == symbol]
+                if symbol_data.empty:
+                    logger.debug(f"No valuation data for {symbol}")
+                    continue
+
+                row = symbol_data.iloc[0]
+                pe_ratio = row["pe_ratio"]
+                pb_ratio = row["pb_ratio"]
+                industry = row["industry"]
+
+                # Use industry median if available, otherwise use defaults
+                if industry and industry in industry_medians:
+                    sector_pe = industry_medians[industry]["pe_ratio"]
+                    sector_pb = industry_medians[industry]["pb_ratio"]
+                else:
+                    # Use conservative market-wide defaults
+                    sector_pe = 15.0
+                    sector_pb = 2.0
+                    logger.debug(f"Using default sector medians for {symbol}")
+
+                # Handle missing PE/PB values
+                if pe_ratio is None or pd.isna(pe_ratio) or pe_ratio <= 0:
+                    logger.debug(f"Invalid PE for {symbol}, using sector median")
+                    pe_ratio = sector_pe
+                if pb_ratio is None or pd.isna(pb_ratio) or pb_ratio <= 0:
+                    logger.debug(f"Invalid PB for {symbol}, using sector median")
+                    pb_ratio = sector_pb
+
+                # Create ValuationMetrics and SectorMetrics
+                company = ValuationMetrics(
+                    pe_ratio=float(pe_ratio),
+                    pb_ratio=float(pb_ratio),
+                    dividend_yield=0.0,  # Not available from batch API
+                    peg_ratio=None,  # Not available from batch API
+                    eps=0.0,  # Not needed for V score
+                    book_value_per_share=0.0,  # Not needed for V score
+                    annual_dividend=0.0,
+                )
+
+                sector = SectorMetrics(
+                    pe_ratio=sector_pe,
+                    pb_ratio=sector_pb,
+                    dividend_yield=0.0,
+                    peg_ratio=None,
+                )
+
+                # Calculate valuation score
+                valuation = self.calculator.calculate_valuation(company, sector)
+                v_scores[symbol] = valuation.composite_score
+
+            except Exception as e:
+                logger.debug(f"Error calculating V score for {symbol}: {e}")
+
+        logger.info(f"Calculated V scores for {len(v_scores)}/{len(symbols)} symbols")
+        return v_scores
+
+    def get_valuation_for_symbols(
+        self, symbols: list[str]
+    ) -> dict[str, dict[str, float | str | None]]:
+        """
+        Get detailed valuation data for specific symbols.
+
+        Args:
+            symbols: List of stock symbols
+
+        Returns:
+            Dictionary with symbol -> {pe_ratio, pb_ratio, v_score, industry}
+        """
+        result: dict[str, dict[str, float | str | None]] = {}
+
+        # Get valuation metrics
+        metrics_df = self.get_valuation_metrics()
+        if metrics_df.empty:
+            return result
+
+        # Get industry mapping
+        industry_map = self.get_stock_industry_map()
+
+        # Calculate V scores
+        v_scores = self.calculate_v_scores(symbols)
+
+        for symbol in symbols:
+            symbol_data = metrics_df[metrics_df["symbol"] == symbol]
+            if symbol_data.empty:
+                continue
+
+            row = symbol_data.iloc[0]
+            result[symbol] = {
+                "pe_ratio": row["pe_ratio"],
+                "pb_ratio": row["pb_ratio"],
+                "v_score": v_scores.get(symbol),
+                "industry": industry_map.get(symbol),
+            }
+
+        return result
