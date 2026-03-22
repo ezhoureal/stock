@@ -32,3 +32,4 @@ data/output/
 
 # Log files
 *.log
+data/sentiment.db
