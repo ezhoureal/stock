@@ -6,17 +6,7 @@
 
 ## Quick Start
 
-### 1. Install Dependencies
-
-```bash
-# Using uv (recommended)
-uv pip install -e ".[data]"
-
-# Or using pip
-pip install duckdb pandas akshare baostock numpy
-```
-
-### 2. Initialize Database
+### 1. Initialize Database
 
 ```bash
 uv run python data/init_db.py
@@ -24,7 +14,7 @@ uv run python data/init_db.py
 
 Creates the DuckDB database with all required tables including the `sectors` table for industry classification.
 
-### 3. Collect Stock Universe
+### 2. Collect Stock Universe
 
 ```bash
 # Collect CSI 300 constituents (300 stocks)
@@ -34,7 +24,7 @@ uv run python data/collect_csi300.py
 uv run python data/collect_all_ashare.py
 ```
 
-### 4. Collect Historical Prices
+### 3. Collect Historical Prices
 
 ```bash
 # Production-ready collection with automatic fallback
@@ -48,7 +38,7 @@ uv run python data/collect_prices.py --source akshare
 uv run python data/collect_prices.py --start-date 2023-01-01 --end-date 2024-01-01
 ```
 
-### 5. Collect Fundamental Data
+### 4. Collect Fundamental Data
 
 ```bash
 # Collect fundamentals with sector classification for CSI 300
@@ -61,7 +51,7 @@ uv run python data/collect_fundamentals.py --universe all
 uv run python data/collect_fundamentals.py --universe csi300 --skip-sectors
 ```
 
-### 6. Rank Stocks (Sentiment + Valuation)
+### 5. Rank Stocks (Sentiment + Valuation)
 
 ```bash
 # Rank CSI 300 stocks

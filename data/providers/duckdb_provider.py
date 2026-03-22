@@ -7,7 +7,7 @@ Provides data access from DuckDB database.
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -124,7 +124,7 @@ class DuckDBDataProvider(DataProvider):
                     df[col] = pd.to_numeric(df[col], errors="coerce")
 
             # Apply adjustment factor
-            if "adj_factor" in df.columns and self.config.price_field == "adj_close":
+            if "adj_factor" in df.columns:
                 # Normalize adjustment factor
                 for symbol in df["symbol"].unique():
                     mask = df["symbol"] == symbol
@@ -173,7 +173,7 @@ class DuckDBDataProvider(DataProvider):
         try:
             df = conn.execute(query, symbols).fetchdf()
 
-            return dict(zip(df["symbol"], df["close"]))
+            return dict(zip(df["symbol"], df["close"], strict=False))
 
         except Exception as e:
             logger.error(f"Error fetching latest prices: {e}")
@@ -232,22 +232,28 @@ class DuckDBDataProvider(DataProvider):
 
             results = []
             for _, row in df.iterrows():
+                # Extract scalar values from Series
+                report_date = row["report_date"]
+                if isinstance(report_date, pd.Series):
+                    report_date = cast(datetime, report_date.iloc[0])
                 results.append(
                     Fundamentals(
-                        symbol=row["symbol"],
-                        timestamp=pd.to_datetime(row["report_date"]),
-                        pe_ratio=row.get("pe"),
-                        pe_ttm=row.get("pe_ttm"),
-                        pb_ratio=row.get("pb"),
-                        ps_ratio=row.get("ps"),
-                        roe=row.get("roe"),
-                        roa=row.get("roa"),
-                        eps=row.get("eps"),
-                        book_value_per_share=row.get("book_value_per_share"),
-                        total_mv=row.get("total_mv"),
-                        circ_mv=row.get("circ_mv"),
-                        sector=row.get("sector"),
-                        industry=row.get("industry"),
+                        symbol=str(row["symbol"]),
+                        timestamp=pd.Timestamp(report_date).to_pydatetime(),  # type: ignore[arg-type]
+                        pe_ratio=float(row["pe"]) if row["pe"] is not None else None,
+                        pe_ttm=float(row["pe_ttm"]) if row["pe_ttm"] is not None else None,
+                        pb_ratio=float(row["pb"]) if row["pb"] is not None else None,
+                        ps_ratio=float(row["ps"]) if row["ps"] is not None else None,
+                        roe=float(row["roe"]) if row["roe"] is not None else None,
+                        roa=float(row["roa"]) if row["roa"] is not None else None,
+                        eps=float(row["eps"]) if row["eps"] is not None else None,
+                        book_value_per_share=float(row["book_value_per_share"])
+                        if row["book_value_per_share"] is not None
+                        else None,
+                        total_mv=float(row["total_mv"]) if row["total_mv"] is not None else None,
+                        circ_mv=float(row["circ_mv"]) if row["circ_mv"] is not None else None,
+                        sector=str(row["sector"]) if row["sector"] is not None else None,
+                        industry=str(row["industry"]) if row["industry"] is not None else None,
                     )
                 )
 
@@ -312,14 +318,21 @@ class DuckDBDataProvider(DataProvider):
 
             results = []
             for _, row in df.iterrows():
+                overall_score = row["overall_score"]
+                source_val = row["source"]
+                news_count = row.get("news_count")
+                # Extract scalar timestamp from Series
+                timestamp = row["timestamp"]
+                if isinstance(timestamp, pd.Series):
+                    timestamp = cast(datetime, timestamp.iloc[0])
                 results.append(
                     SentimentScore(
-                        symbol=row["symbol"],
-                        timestamp=pd.to_datetime(row["timestamp"]),
-                        score=float(row["overall_score"]) if row["overall_score"] else 0.0,
+                        symbol=str(row["symbol"]),
+                        timestamp=pd.Timestamp(timestamp).to_pydatetime(),  # type: ignore[arg-type]
+                        score=float(overall_score) if overall_score is not None else 0.0,
                         confidence=0.8,  # Default confidence
-                        source=row["source"] or "composite",
-                        sample_size=row.get("news_count", 0),
+                        source=str(source_val) if source_val is not None else "composite",
+                        sample_size=int(news_count) if news_count is not None else 0,
                     )
                 )
 
@@ -365,12 +378,18 @@ class DuckDBDataProvider(DataProvider):
 
             result = {}
             for _, row in df.iterrows():
-                result[row["symbol"]] = SentimentScore(
-                    symbol=row["symbol"],
-                    timestamp=pd.to_datetime(row["timestamp"]),
-                    score=float(row["overall_score"]) if row["overall_score"] else 0.0,
+                overall_score = row["overall_score"]
+                source_val = row["source"]
+                # Extract scalar timestamp from Series
+                timestamp = row["timestamp"]
+                if isinstance(timestamp, pd.Series):
+                    timestamp = cast(datetime, timestamp.iloc[0])
+                result[str(row["symbol"])] = SentimentScore(
+                    symbol=str(row["symbol"]),
+                    timestamp=pd.Timestamp(timestamp).to_pydatetime(),  # type: ignore[arg-type]
+                    score=float(overall_score) if overall_score is not None else 0.0,
                     confidence=0.8,
-                    source=row["source"] or "composite",
+                    source=str(source_val) if source_val is not None else "composite",
                 )
 
             return result
@@ -457,16 +476,21 @@ class DuckDBDataProvider(DataProvider):
 
             bars = []
             for _, row in df.iterrows():
+                amount = row["amount"]
+                # Extract scalar timestamp from Series
+                timestamp = row["timestamp"]
+                if isinstance(timestamp, pd.Series):
+                    timestamp = cast(datetime, timestamp.iloc[0])
                 bars.append(
                     Bar(
                         symbol=symbol,
-                        timestamp=pd.to_datetime(row["timestamp"]),
+                        timestamp=pd.Timestamp(timestamp).to_pydatetime(),  # type: ignore[arg-type]
                         open=float(row["open"]),
                         high=float(row["high"]),
                         low=float(row["low"]),
                         close=float(row["close"]),
                         volume=float(row["volume"]),
-                        amount=float(row["amount"]) if row["amount"] else None,
+                        amount=float(amount) if amount is not None else None,
                     )
                 )
 
@@ -503,7 +527,8 @@ class DuckDBDataProvider(DataProvider):
         # Pivot to get close prices with symbols as columns
         close_prices = df["close"].unstack(level=0)
 
-        return close_prices
+        # Ensure we return DataFrame even if unstack returns Series
+        return pd.DataFrame(close_prices)
 
     def get_return_dataframe(
         self,

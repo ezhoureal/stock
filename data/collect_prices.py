@@ -16,6 +16,7 @@ import sys
 import time
 import traceback
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -99,7 +100,7 @@ class PriceCollector:
                 return json.load(f)
         except Exception as e:
             self.logger.error(f"Failed to load config: {e}")
-            raise DataCollectionError(f"Config load failed: {e}")
+            raise DataCollectionError(f"Config load failed: {e}") from e
 
     def _rate_limit(self):
         """Apply rate limiting between API calls"""
@@ -161,8 +162,8 @@ class PriceCollector:
 
                 self._baostock = bs
                 self.logger.info("Baostock loaded successfully")
-            except ImportError:
-                raise DataSourceError("Baostock not installed")
+            except ImportError as e:
+                raise DataSourceError("Baostock not installed") from e
         return self._baostock
 
     def _get_akshare(self):
@@ -173,8 +174,8 @@ class PriceCollector:
 
                 self._akshare = ak
                 self.logger.info("Akshare loaded successfully")
-            except ImportError:
-                raise DataSourceError("Akshare not installed")
+            except ImportError as e:
+                raise DataSourceError("Akshare not installed") from e
         return self._akshare
 
     def _connect_database(self):
@@ -185,7 +186,7 @@ class PriceCollector:
             conn = duckdb.connect(self.db_path)
             return conn
         except Exception as e:
-            raise DataCollectionError(f"Database connection failed: {e}")
+            raise DataCollectionError(f"Database connection failed: {e}") from e
 
     def _validate_price_data(self, df) -> bool:
         """
@@ -260,8 +261,10 @@ class PriceCollector:
                 adjustflag="2",  # 2=复权
             )
 
-            if rs.error_code != "0":
-                raise DataSourceError(f"Baostock API error: {rs.error_code} - {rs.error_msg}")
+            if rs is None or rs.error_code != "0":
+                error_code = rs.error_code if rs is not None else "unknown"
+                error_msg = rs.error_msg if rs is not None else "No response"
+                raise DataSourceError(f"Baostock API error: {error_code} - {error_msg}")
 
             data_list = []
             while (rs.error_code == "0") & rs.next():
@@ -274,7 +277,8 @@ class PriceCollector:
             # Convert to DataFrame
             import pandas as pd
 
-            df = pd.DataFrame(data_list, columns=rs.fields)
+            fields: list[str] = list(rs.fields) if rs is not None else []
+            df = pd.DataFrame(data_list, columns=fields)  # type: ignore[arg-type]
 
             # Convert data types
             df["date"] = pd.to_datetime(df["date"])
@@ -292,7 +296,7 @@ class PriceCollector:
 
         except Exception as e:
             self.logger.error(f"Baostock fetch failed for {stock_id}: {e}")
-            raise DataSourceError(f"Baostock fetch failed: {e}")
+            raise DataSourceError(f"Baostock fetch failed: {e}") from e
 
     def fetch_prices_akshare(self, stock_id: str, start_date: str, end_date: str):
         """
@@ -357,7 +361,7 @@ class PriceCollector:
 
         except Exception as e:
             self.logger.error(f"Akshare fetch failed for {stock_id}: {e}")
-            raise DataSourceError(f"Akshare fetch failed: {e}")
+            raise DataSourceError(f"Akshare fetch failed: {e}") from e
 
     def fetch_prices(self, stock_id: str, start_date: str, end_date: str, source: str = "auto"):
         """
@@ -494,7 +498,7 @@ class PriceCollector:
 
         except Exception as e:
             conn.execute("ROLLBACK")
-            raise DataCollectionError(f"Failed to save prices for {stock_id}: {e}")
+            raise DataCollectionError(f"Failed to save prices for {stock_id}: {e}") from e
 
     def collect_prices(
         self,
@@ -522,12 +526,12 @@ class PriceCollector:
             # Get stock IDs if not provided
             if stock_ids is None:
                 self.logger.info("Fetching CSI 300 stock list from database...")
-                stock_ids = conn.execute("""
+                rows = conn.execute("""
                     SELECT stock_id FROM stocks
                     WHERE is_csi300 = TRUE AND is_active = TRUE
                     ORDER BY stock_id
                 """).fetchall()
-                stock_ids = [row[0] for row in stock_ids]
+                stock_ids = [row[0] for row in rows]
                 self.logger.info(f"Found {len(stock_ids)} CSI 300 stocks")
 
             # Set date range

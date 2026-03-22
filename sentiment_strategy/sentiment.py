@@ -353,7 +353,7 @@ class SentimentAnalyzer:
         # BUG-016: Use lock for thread-safe access to historical scores
         with self._lock:
             if symbol not in self._historical_scores:
-                return pd.DataFrame(columns=["timestamp", "score"])
+                return pd.DataFrame({"timestamp": [], "score": []})
 
             timestamps = self._historical_timestamps[symbol]
             scores = self._historical_scores[symbol]
@@ -361,9 +361,9 @@ class SentimentAnalyzer:
             df = pd.DataFrame({"timestamp": timestamps, "score": scores})
 
         if start_date:
-            df = df[df["timestamp"] >= start_date]
+            df = df.loc[df["timestamp"] >= start_date]
         if end_date:
-            df = df[df["timestamp"] <= end_date]
+            df = df.loc[df["timestamp"] <= end_date]
 
         return df.reset_index(drop=True)
 
@@ -416,12 +416,12 @@ class SentimentAnalyzer:
                 z_score = (scores[-1] - mean_excl_current) / std_excl_current
 
         return {
-            "mean": np.mean(scores),
-            "std": np.std(scores),
-            "min": np.min(scores),
-            "max": np.max(scores),
-            "current": scores[-1],
-            "z_score": z_score,
+            "mean": float(np.mean(scores)),
+            "std": float(np.std(scores)),
+            "min": float(np.min(scores)),
+            "max": float(np.max(scores)),
+            "current": float(scores[-1]),
+            "z_score": float(z_score),
         }
 
     def is_sentiment_extreme(self, symbol: str, threshold_std: float = 1.5) -> tuple[bool, float]:

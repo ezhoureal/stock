@@ -324,20 +324,24 @@ class ValuationCalculator:
             sector_row = sector_data.iloc[0]
 
             company = ValuationMetrics(
-                pe_ratio=row["pe_ratio"],
-                pb_ratio=row["pb_ratio"],
-                dividend_yield=row["dividend_yield"],
-                peg_ratio=row.get("peg_ratio", None),
-                eps=row["eps"],
-                book_value_per_share=row["book_value_per_share"],
-                annual_dividend=row["annual_dividend"],
+                pe_ratio=float(row["pe_ratio"]),
+                pb_ratio=float(row["pb_ratio"]),
+                dividend_yield=float(row["dividend_yield"]),
+                peg_ratio=float(row["peg_ratio"])
+                if "peg_ratio" in row and row["peg_ratio"] is not None
+                else None,
+                eps=float(row["eps"]),
+                book_value_per_share=float(row["book_value_per_share"]),
+                annual_dividend=float(row["annual_dividend"]),
             )
 
             sector = SectorMetrics(
-                pe_ratio=sector_row["pe_ratio"],
-                pb_ratio=sector_row["pb_ratio"],
-                dividend_yield=sector_row["dividend_yield"],
-                peg_ratio=sector_row.get("peg_ratio", None),
+                pe_ratio=float(sector_row["pe_ratio"]),
+                pb_ratio=float(sector_row["pb_ratio"]),
+                dividend_yield=float(sector_row["dividend_yield"]),
+                peg_ratio=float(sector_row["peg_ratio"])
+                if "peg_ratio" in sector_row and sector_row["peg_ratio"] is not None
+                else None,
             )
 
             valuation = self.calculate_valuation(company, sector)

@@ -252,7 +252,7 @@ def test_full_integration():
 
     # 5. Check positions
     print("\n5. Current positions:")
-    positions = broker.get_positions()
+    positions = broker.get_positions_broker()
     for pos in positions:
         print(f"   {pos.symbol}: {pos.quantity} shares @ ¥{pos.avg_cost:.2f}")
         print(f"      Market Value: ¥{pos.market_value:,.2f}")
@@ -273,7 +273,7 @@ def test_full_integration():
 
     # 8. Check updated positions
     print("\n8. Updated positions:")
-    positions = broker.get_positions()
+    positions = broker.get_positions_broker()
     for pos in positions:
         print(f"   {pos.symbol}: Unrealized P&L: ¥{pos.unrealized_pnl:,.2f} ({pos.return_pct:.2%})")
 
@@ -298,7 +298,6 @@ def test_full_integration():
     print(f"   Positions: {len(broker.get_positions())}")
 
     # Calculate realized P&L
-    total_realized = sum(p.realized_pnl for p in broker.get_positions())
     final_pnl = broker.cash - broker.initial_cash
     print(f"   Realized P&L: ¥{final_pnl:,.2f}")
 

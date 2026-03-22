@@ -123,7 +123,7 @@ class SignalRouterImpl(SignalRouterInterface):
         # Step 4: Resolve conflicts
         resolved_signals = []
         conflicts = []
-        for symbol, sigs in signals_by_symbol.items():
+        for _symbol, sigs in signals_by_symbol.items():
             if len(sigs) == 1:
                 resolved_signals.append(sigs[0])
             else:
@@ -282,7 +282,7 @@ class SignalRouterImpl(SignalRouterInterface):
                 for s in signals
                 if getattr(s, attr) is not None
             ]
-            return sum(v * w for v, w in zip(values, weights)) / sum(weights)
+            return sum(v * w for v, w in zip(values, weights, strict=False)) / sum(weights)
 
         merged = TradingSignal(
             symbol=signals[0].symbol,

@@ -40,13 +40,13 @@ class OrderRequest:
     stop_price: float | None = None
     time_in_force: str = "DAY"  # DAY, GTC, IOC, FOK
     client_order_id: str | None = None
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
 
-    def validate(self) -> "OrderValidationError":
+    def validate(self) -> "OrderValidationError | None":
         """
         Validate order request
 
@@ -101,8 +101,8 @@ class OrderResponse:
     message: str | None = None
     error_type: str | None = None
     client_order_id: str | None = None
-    submitted_at: datetime = None
-    metadata: dict[str, Any] = None
+    submitted_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self):
         if self.submitted_at is None:

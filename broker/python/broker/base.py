@@ -9,7 +9,7 @@ broker-specific functionality like market data subscriptions.
 """
 
 import sys
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -21,9 +21,9 @@ _common_path = Path(__file__).parent.parent.parent / "common"
 if str(_common_path) not in sys.path:
     sys.path.insert(0, str(_common_path))
 
-from common.interfaces import ExecutionClient
-from common.types import Order as CommonOrder
-from common.types import Position as CommonPosition
+from common.interfaces import ExecutionClient  # noqa: E402
+from common.types import Order as CommonOrder  # noqa: E402
+from common.types import Position as CommonPosition  # noqa: E402
 
 
 class OrderType(Enum):
@@ -310,16 +310,20 @@ class AccountBalance:
     last_update: datetime = field(default_factory=datetime.now)
 
 
-class BrokerInterface(ExecutionClient):
+class BrokerInterface(ExecutionClient, ABC):
     """
     Abstract base class for broker implementations.
 
     This extends ExecutionClient from common module and adds
     broker-specific functionality like market data subscriptions.
 
+    This class uses broker-specific Order and Position types internally but
+    converts to/from common.types.Order and common.types.Position when
+    implementing the ExecutionClient interface.
+
     Subclasses must implement:
-    - place_order() - Core order placement
-    - get_orders() - Get all orders
+    - place_order() - Core order placement (broker-specific)
+    - get_orders() - Get all orders (broker-specific)
     - subscribe_market_data() - Market data subscription
     - unsubscribe_market_data() - Market data unsubscription
     - get_market_data() - Get market data
@@ -341,15 +345,15 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_orders(self, symbol: str | None = None) -> list[Order]:
+    def get_orders_broker(self, symbol: str | None = None) -> list[Order]:
         """
-        Get all orders or orders for a specific symbol
+        Get all orders or orders for a specific symbol (broker-specific)
 
         Args:
             symbol: Optional symbol filter
 
         Returns:
-            List[Order]: List of orders
+            List[Order]: List of orders (broker-specific Order type)
         """
         pass
 
@@ -392,22 +396,10 @@ class BrokerInterface(ExecutionClient):
         """
         pass
 
-    # === ExecutionClient interface implementation ===
-
-    def submit_order(self, order: CommonOrder) -> CommonOrder:
-        """
-        Implementation of ExecutionClient.submit_order
-
-        Converts common Order to broker Order, places it, and converts back.
-        """
-        broker_order = Order.from_common_order(order)
-        result = self.place_order(broker_order)
-        return result.to_common_order()
-
     @abstractmethod
-    def get_order(self, order_id: str) -> Order:
+    def get_order_broker(self, order_id: str) -> Order:
         """
-        Get order status
+        Get order status (broker-specific)
 
         Args:
             order_id: Order ID to retrieve
@@ -418,9 +410,9 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_positions(self) -> list[Position]:
+    def get_positions_broker(self) -> list[Position]:
         """
-        Get current positions
+        Get current positions (broker-specific)
 
         Returns:
             List[Position]: List of current positions
@@ -428,9 +420,9 @@ class BrokerInterface(ExecutionClient):
         pass
 
     @abstractmethod
-    def get_position(self, symbol: str) -> Position | None:
+    def get_position_broker(self, symbol: str) -> Position | None:
         """
-        Get position for a specific symbol
+        Get position for a specific symbol (broker-specific)
 
         Args:
             symbol: Symbol to retrieve
@@ -450,6 +442,119 @@ class BrokerInterface(ExecutionClient):
         """
         pass
 
+    # === ExecutionClient interface implementation (uses common types) ===
+
+    @abstractmethod
+    def connect(self) -> bool:
+        """
+        Connect to the broker.
+
+        Returns:
+            True if connection successful
+        """
+        pass
+
+    @abstractmethod
+    def disconnect(self) -> None:
+        """Disconnect from the broker."""
+        pass
+
+    @abstractmethod
+    def is_connected(self) -> bool:
+        """
+        Check if connected to broker.
+
+        Returns:
+            True if connected
+        """
+        pass
+
+    def submit_order(self, order: CommonOrder) -> CommonOrder:
+        """
+        Implementation of ExecutionClient.submit_order
+
+        Converts common Order to broker Order, places it, and converts back.
+        """
+        broker_order = Order.from_common_order(order)
+        result = self.place_order(broker_order)
+        return result.to_common_order()
+
+    @abstractmethod
+    def cancel_order(self, order_id: str) -> bool:
+        """
+        Cancel an order.
+
+        Args:
+            order_id: Order ID to cancel
+
+        Returns:
+            True if cancellation successful
+        """
+        pass
+
+    def get_order(self, order_id: str) -> CommonOrder:
+        """
+        Get order status (ExecutionClient interface)
+
+        Args:
+            order_id: Order ID to retrieve
+
+        Returns:
+            Order: Current order status (common.types.Order)
+        """
+        broker_order = self.get_order_broker(order_id)
+        return broker_order.to_common_order()
+
+    def get_orders_common(self, symbol: str | None = None) -> list[CommonOrder]:
+        """
+        Get all orders (ExecutionClient interface)
+
+        Args:
+            symbol: Optional symbol filter
+
+        Returns:
+            List[Order]: List of orders (common.types.Order)
+        """
+        broker_orders = self.get_orders_broker(symbol)
+        return [o.to_common_order() for o in broker_orders]
+
+    def get_orders(self, symbol: str | None = None) -> list[CommonOrder]:
+        """
+        Get all orders (ExecutionClient interface implementation)
+
+        Args:
+            symbol: Optional symbol filter
+
+        Returns:
+            List[Order]: List of orders (common.types.Order)
+        """
+        return self.get_orders_common(symbol)
+
+    def get_positions(self) -> list[CommonPosition]:
+        """
+        Get current positions (ExecutionClient interface)
+
+        Returns:
+            List[Position]: List of current positions (common.types.Position)
+        """
+        broker_positions = self.get_positions_broker()
+        return [p.to_common_position() for p in broker_positions]
+
+    def get_position(self, symbol: str) -> CommonPosition | None:
+        """
+        Get position for a specific symbol (ExecutionClient interface)
+
+        Args:
+            symbol: Symbol to retrieve
+
+        Returns:
+            Optional[Position]: Position if exists, None otherwise (common.types.Position)
+        """
+        broker_position = self.get_position_broker(symbol)
+        if broker_position is None:
+            return None
+        return broker_position.to_common_position()
+
     def get_total_equity(self) -> float:
         """
         Get total account equity
@@ -458,6 +563,6 @@ class BrokerInterface(ExecutionClient):
             float: Total equity (cash + positions)
         """
         balance = self.get_account_balance()
-        positions = self.get_positions()
+        positions = self.get_positions_broker()
         positions_value = sum(p.market_value for p in positions)
         return balance + positions_value

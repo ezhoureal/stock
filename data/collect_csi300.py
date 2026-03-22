@@ -152,7 +152,8 @@ def main():
 
     # Verify
     print("\nVerifying data...")
-    count = conn.execute("SELECT COUNT(*) FROM stocks WHERE is_csi300 = TRUE").fetchone()[0]
+    result = conn.execute("SELECT COUNT(*) FROM stocks WHERE is_csi300 = TRUE").fetchone()
+    count = result[0] if result else 0
     print(f"✓ CSI 300 stocks in database: {count}")
 
     # Show sample

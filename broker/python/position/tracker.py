@@ -8,6 +8,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+from typing import Any
+
 from broker.base import Position
 
 
@@ -176,7 +178,7 @@ class PositionTracker:
 
         return realized_pnl
 
-    def get_position_summary(self) -> dict[str, any]:
+    def get_position_summary(self) -> dict[str, Any]:
         """
         Get position summary
 

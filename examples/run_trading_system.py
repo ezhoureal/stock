@@ -8,6 +8,9 @@ Demonstrates how to use the unified trading system interfaces.
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
+
+import pandas as pd
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -65,7 +68,7 @@ def example_backtest():
     system = create_system()
 
     # Configure backtest
-    backtest_config = BacktestConfig(
+    BacktestConfig(
         initial_capital=1_000_000.0,
         commission_rate=0.0003,
         slippage_rate=0.001,
@@ -139,14 +142,15 @@ def example_custom_strategy():
 
             for symbol in symbols:
                 try:
-                    symbol_prices = prices.xs(symbol, level=0)["close"]
+                    symbol_prices: pd.Series = pd.Series(prices.xs(symbol, level=0)["close"])
 
                     if len(symbol_prices) < 20:
                         continue
 
                     # Simple momentum: buy if price > 20-day MA
-                    ma20 = symbol_prices.rolling(20).mean().iloc[-1]
-                    current_price = symbol_prices.iloc[-1]
+                    rolling_mean: Any = symbol_prices.rolling(20).mean()
+                    ma20: float = float(rolling_mean.iloc[-1])
+                    current_price: float = float(symbol_prices.iloc[-1])
 
                     if current_price > ma20 * 1.02:  # 2% above MA
                         signal = TradingSignal(

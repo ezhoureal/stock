@@ -68,7 +68,7 @@ def test_mock_broker():
     print(f"   Filled: {result.filled_quantity} @ ¥{result.avg_fill_price:.2f}")
 
     # Update position tracker
-    if result.status == OrderStatus.FILLED:
+    if result.status == OrderStatus.FILLED and result.avg_fill_price is not None:
         position_tracker.update_position(
             "600519.SH",
             result.quantity,
@@ -91,7 +91,7 @@ def test_mock_broker():
     print(f"   Status: {result.status.value}")
     print(f"   Filled: {result.filled_quantity} @ ¥{result.avg_fill_price:.2f}")
 
-    if result.status == OrderStatus.FILLED:
+    if result.status == OrderStatus.FILLED and result.avg_fill_price is not None:
         position_tracker.update_position(
             "000858.SZ",
             result.quantity,
@@ -114,7 +114,7 @@ def test_mock_broker():
     print(f"   Status: {result.status.value}")
     print(f"   Filled: {result.filled_quantity} @ ¥{result.avg_fill_price:.2f}")
 
-    if result.status == OrderStatus.FILLED:
+    if result.status == OrderStatus.FILLED and result.avg_fill_price is not None:
         position_tracker.update_position(
             "600036.SH",
             result.quantity,
@@ -123,7 +123,7 @@ def test_mock_broker():
 
     # Check positions
     print("\n7. Current Positions:")
-    positions = broker.get_positions()
+    positions = broker.get_positions_broker()
     for pos in positions:
         print(f"   {pos.symbol}:")
         print(f"     Quantity: {pos.quantity}")
@@ -133,14 +133,18 @@ def test_mock_broker():
 
     # Update prices and check P&L
     print("\n8. Updating prices...")
-    broker.set_market_price("600519.SH", broker.get_market_price("600519.SH") * 1.02)
-    broker.set_market_price("000858.SZ", broker.get_market_price("000858.SZ") * 0.98)
+    moutai_price = broker.get_market_price("600519.SH")
+    if moutai_price is not None:
+        broker.set_market_price("600519.SH", moutai_price * 1.02)
+    wuliangye_price = broker.get_market_price("000858.SZ")
+    if wuliangye_price is not None:
+        broker.set_market_price("000858.SZ", wuliangye_price * 0.98)
     print("   ✓ Moutai: +2%")
     print("   ✓ Wuliangye: -2%")
 
     # Check P&L after price update
     print("\n9. Positions after price update:")
-    for pos in broker.get_positions():
+    for pos in broker.get_positions_broker():
         print(f"   {pos.symbol}:")
         print(f"     Current Price: ¥{pos.current_price:.2f}")
         print(f"     Unrealized P&L: ¥{pos.unrealized_pnl:,.2f}")
@@ -170,8 +174,10 @@ def test_mock_broker():
 
     # Test order validation
     print("\n13. Test Order Validation:")
-    current_positions = {pos.symbol: pos.quantity for pos in broker.get_positions()}
-    market_prices = {sym: broker.get_market_price(sym) for sym in symbols}
+    current_positions = {pos.symbol: pos.quantity for pos in broker.get_positions_broker()}
+    market_prices = {
+        sym: price for sym in symbols if (price := broker.get_market_price(sym)) is not None
+    }
 
     # Test: Exceed position limit
     order_request = OrderRequest(
@@ -232,22 +238,26 @@ def test_mock_broker():
 
     # Test order cancellation
     print("\n14. Test Order Cancellation:")
-    order = Order(
-        symbol="600519.SH",
-        side=OrderSide.BUY,
-        order_type=OrderType.LIMIT,
-        quantity=100,
-        price=broker.get_market_price("600519.SH") * 0.9,  # Below market
-    )
-    result = broker.place_order(order)
-    print(f"    Placed order: {result.order_id}")
-
-    if broker.cancel_order(result.order_id):
-        print("    ✓ Order cancelled")
-        updated_order = broker.get_order(result.order_id)
-        print(f"    Status: {updated_order.status.value}")
+    moutai_price = broker.get_market_price("600519.SH")
+    if moutai_price is None:
+        print("    ✗ Failed to get market price")
     else:
-        print("    ✗ Failed to cancel order")
+        order = Order(
+            symbol="600519.SH",
+            side=OrderSide.BUY,
+            order_type=OrderType.LIMIT,
+            quantity=100,
+            price=moutai_price * 0.9,  # Below market
+        )
+        result = broker.place_order(order)
+        if result.order_id is None:
+            print("    ✗ Failed to place order")
+        elif broker.cancel_order(result.order_id):
+            print("    ✓ Order cancelled")
+            updated_order = broker.get_order_broker(result.order_id)
+            print(f"    Status: {updated_order.status.value}")
+        else:
+            print("    ✗ Failed to cancel order")
 
     # Final summary
     print("\n15. Final Summary:")

@@ -48,11 +48,10 @@ class MockBroker(BrokerInterface):
         print(f"[MockBroker] Connected (Initial Cash: ¥{self.cash:,.2f})")
         return True
 
-    def disconnect(self) -> bool:
+    def disconnect(self) -> None:
         """Disconnect from the mock broker"""
         self._connected = False
         print("[MockBroker] Disconnected")
-        return True
 
     def is_connected(self) -> bool:
         """Check if connected"""
@@ -91,8 +90,14 @@ class MockBroker(BrokerInterface):
         if order.side == OrderSide.BUY:
             if order.order_type == OrderType.MARKET:
                 price = self.market_prices.get(order.symbol, 10.0)
-            else:
+            elif order.price is not None:
                 price = order.price
+            else:
+                # This should not happen due to prior validation, but handle it
+                order.status = OrderStatus.REJECTED
+                order.reject_reason = "Price not available"
+                self.orders[order.order_id] = order
+                return order
 
             required = price * order.quantity
             if required > self.cash:
@@ -122,7 +127,12 @@ class MockBroker(BrokerInterface):
         if order.order_type == OrderType.MARKET:
             execution_price = self.market_prices.get(order.symbol, 10.0)
         elif order.order_type in [OrderType.LIMIT, OrderType.STOP_LIMIT]:
-            execution_price = order.price
+            # order.price should not be None here due to prior validation
+            execution_price = (
+                order.price
+                if order.price is not None
+                else self.market_prices.get(order.symbol, 10.0)
+            )
         else:  # STOP
             execution_price = self.market_prices.get(order.symbol, 10.0)
 
@@ -156,7 +166,7 @@ class MockBroker(BrokerInterface):
             # Update position
             position = self.positions.get(order.symbol)
             if position:
-                realized_pnl = position.add_fill(-order.quantity, execution_price)
+                position.add_fill(-order.quantity, execution_price)
                 if position.quantity == 0:
                     del self.positions[order.symbol]
 
@@ -175,15 +185,15 @@ class MockBroker(BrokerInterface):
         order.update_status(OrderStatus.CANCELLED)
         return True
 
-    def get_order(self, order_id: str) -> Order:
-        """Get order status"""
+    def get_order_broker(self, order_id: str) -> Order:
+        """Get order status (broker-specific)"""
         order = self.orders.get(order_id)
         if order is None:
             raise ValueError(f"Order not found: {order_id}")
         return order
 
-    def get_orders(self, symbol: str | None = None) -> list[Order]:
-        """Get all orders or orders for a specific symbol"""
+    def get_orders_broker(self, symbol: str | None = None) -> list[Order]:
+        """Get all orders or orders for a specific symbol (broker-specific)"""
         orders = list(self.orders.values())
         if symbol is not None:
             orders = [o for o in orders if o.symbol == symbol]
@@ -191,12 +201,12 @@ class MockBroker(BrokerInterface):
 
     # === Position Management ===
 
-    def get_positions(self) -> list[Position]:
-        """Get current positions"""
+    def get_positions_broker(self) -> list[Position]:
+        """Get current positions (broker-specific)"""
         return list(self.positions.values())
 
-    def get_position(self, symbol: str) -> Position | None:
-        """Get position for a specific symbol"""
+    def get_position_broker(self, symbol: str) -> Position | None:
+        """Get position for a specific symbol (broker-specific)"""
         return self.positions.get(symbol)
 
     # === Account Information ===
@@ -268,7 +278,9 @@ class MockBroker(BrokerInterface):
             Optional[float]: Current price or None
         """
         market_data = self.get_market_data(symbol)
-        return market_data.get("price")
+        price = market_data.get("price")
+        # Ensure the returned value is either a float or None
+        return float(price) if isinstance(price, (int, float)) else None
 
     def set_market_price(self, symbol: str, price: float) -> None:
         """
@@ -297,7 +309,7 @@ class MockBroker(BrokerInterface):
         """
         time.sleep(0)  # In real implementation, might actually sleep
         # Update timestamps in market data
-        for symbol, data in self.market_data.items():
+        for _symbol, data in self.market_data.items():
             data["timestamp"] = datetime.now()
 
     def reset(self) -> None:

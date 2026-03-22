@@ -112,7 +112,7 @@ def get_stocks_from_db(conn, universe: str = "csi300") -> pd.DataFrame:
         """
 
     result = conn.execute(query).fetchall()
-    df = pd.DataFrame(result, columns=["stock_id", "name", "ts_code"])
+    df = pd.DataFrame(result, columns=["stock_id", "name", "ts_code"])  # type: ignore[arg-type]
     logger.info(f"Loaded {len(df)} stocks from database (universe={universe})")
     return df
 
@@ -146,8 +146,9 @@ def get_sentiment_scores(
             "Using lightweight mode (skipping per-stock fund flow & northbound data)..."
         )
 
-    for idx, row in stocks_df.iterrows():
-        stock_id = row["stock_id"]
+    for i, (_, row) in enumerate(stocks_df.iterrows()):
+        stock_id = str(row["stock_id"])
+        idx = i
         if progress and (idx + 1) % 10 == 0:
             logger.info(f"Fetching sentiment: {idx + 1}/{total} stocks...")
 
@@ -241,8 +242,9 @@ def get_valuation_scores(
         peg_ratio=1.5,
     )
 
-    for idx, row in stocks_df.iterrows():
-        stock_id = row["stock_id"]
+    for i, (_, row) in enumerate(stocks_df.iterrows()):
+        stock_id = str(row["stock_id"])
+        idx = i
         if progress and (idx + 1) % 50 == 1:
             logger.info(f"Calculating valuation: {idx + 1}/{total} stocks...")
 
@@ -257,7 +259,7 @@ def get_valuation_scores(
                 pe_ttm=fund_data.get("pe_ttm"),
                 pb_ratio=fund_data.get("pb"),
                 book_value_per_share=fund_data.get("bps"),
-                roe=fund_data.get("roe"),
+                roe=fund_data.get("roe") if fund_data.get("roe") is not None else None,
             )
 
             # Get sector-specific metrics if available
@@ -410,8 +412,8 @@ def rank_stocks(
     rankings = []
 
     for _, row in stocks_df.iterrows():
-        stock_id = row["stock_id"]
-        stock_name = row["name"]
+        stock_id = str(row["stock_id"])
+        stock_name = str(row["name"])
 
         sentiment = sentiment_scores.get(stock_id, 0.0)
         valuation = valuation_scores.get(stock_id, 0.0)

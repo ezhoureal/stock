@@ -8,10 +8,11 @@ Demonstrates the full system working with synthetic data.
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+from pandas import Timestamp
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -480,9 +481,12 @@ def test_data_provider():
 
     prices = data_provider.get_prices(symbols, start, end)
     print(f"\nPrice data shape: {prices.shape}")
-    print(
-        f"Date range: {prices.index.get_level_values(1).min().date()} to {prices.index.get_level_values(1).max().date()}"
-    )
+
+    # Get date range with proper type handling
+    date_index = prices.index.get_level_values(1)
+    min_date = cast(Timestamp, date_index.min()).to_pydatetime().date()
+    max_date = cast(Timestamp, date_index.max()).to_pydatetime().date()
+    print(f"Date range: {min_date} to {max_date}")
 
     # Test latest prices
     latest = data_provider.get_latest_prices(symbols)

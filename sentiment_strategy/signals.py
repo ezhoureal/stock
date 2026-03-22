@@ -382,13 +382,18 @@ class SignalGenerator(BaseSignalGenerator):
         """
         from .sentiment import SentimentResult
 
+        scaled_score = sentiment_score.score * 3.0  # Scale to match internal range
+
         return SentimentResult(
             symbol=symbol,
             timestamp=timestamp,
-            smoothed_score=sentiment_score.score * 3.0,  # Scale to match internal range
+            total_score=scaled_score,
+            smoothed_score=scaled_score,
             roc=0.0,  # No ROC data available in snapshot
-            sources={sentiment_score.source: sentiment_score.score},
+            interpretation="neutral",  # No interpretation available in snapshot
+            source_scores={sentiment_score.source: sentiment_score.score},
             confidences={sentiment_score.source: sentiment_score.confidence},
+            signals={},  # No signals available in snapshot
         )
 
     def _create_signal(
@@ -416,7 +421,7 @@ class SignalGenerator(BaseSignalGenerator):
         """
         # Check for exit on existing position
         if symbol in self._positions:
-            exit_result = self._check_exit_conditions(
+            exit_result = self.check_exit_conditions(
                 self._positions[symbol], current_price, sentiment, valuation
             )
             if exit_result:
@@ -498,7 +503,7 @@ class SignalGenerator(BaseSignalGenerator):
         # Calculate confidence (based on signal strength and source confidence)
         confidence = strength / 100.0
         if sentiment.confidences:
-            avg_confidence = np.mean(list(sentiment.confidences.values()))
+            avg_confidence = float(np.mean(list(sentiment.confidences.values())))
             confidence = (confidence + avg_confidence) / 2
 
         signal = CommonTradingSignal(
@@ -724,7 +729,7 @@ class SignalGenerator(BaseSignalGenerator):
 
         return len(recent_signals) >= required
 
-    def _check_exit_conditions(
+    def check_exit_conditions(
         self,
         position: InternalPosition,
         current_price: float,
@@ -733,6 +738,8 @@ class SignalGenerator(BaseSignalGenerator):
     ) -> tuple[SignalType, list[str]] | None:
         """
         Check if an active position should be exited.
+
+        Public method for testing and example code.
 
         Exit conditions:
         1. Stop-loss hit

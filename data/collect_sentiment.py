@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -48,7 +49,7 @@ try:
 
     AKSHARE_AVAILABLE = True
 except ImportError:
-    ak = None
+    ak = None  # type: ignore[assignment]
     AKSHARE_AVAILABLE = False
     logger.warning("akshare not installed. AKShare sentiment sources will be unavailable.")
 
@@ -227,7 +228,7 @@ class AKShareSentimentFetcher:
             self._last_request_time = time.time()
             self._request_count += 1
 
-    def _retry_with_backoff(self, func: callable, *args, **kwargs) -> Any:
+    def _retry_with_backoff(self, func: Callable[..., Any], *args, **kwargs) -> Any:
         """
         Execute function with exponential backoff retry for connection errors.
 
@@ -290,6 +291,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = ak.stock_hot_rank_em()
             self._set_cache(cache_key, df)
             return df
@@ -317,8 +319,13 @@ class AKShareSentimentFetcher:
                 metadata={"rank": None, "in_top_100": False},
             )
 
-        rank = int(rank_row["当前排名"].values[0])
-        price_change = float(rank_row["涨跌幅"].values[0])
+        rank_series = rank_row["当前排名"]
+        price_series = rank_row["涨跌幅"]
+        # Access first value from Series (prefer iloc for better performance)
+        rank_val = rank_series.iloc[0] if hasattr(rank_series, "iloc") else rank_series[0]  # type: ignore[index]
+        price_val = price_series.iloc[0] if hasattr(price_series, "iloc") else price_series[0]  # type: ignore[index]
+        rank = int(rank_val)  # type: ignore[arg-type]
+        price_change = float(price_val)  # type: ignore[arg-type]
 
         # Normalize rank to sentiment
         if rank <= self.config.extreme_hot_rank:
@@ -360,6 +367,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = ak.stock_comment_em()
             self._set_cache(cache_key, df)
             return df
@@ -379,9 +387,16 @@ class AKShareSentimentFetcher:
         if row.empty:
             return None
 
-        comprehensive_score = float(row["综合得分"].values[0])
-        institution_participation = float(row["机构参与度"].values[0])
-        attention_index = float(row["关注指数"].values[0])
+        score_series = row["综合得分"]
+        inst_series = row["机构参与度"]
+        attn_series = row["关注指数"]
+        # Access first value from Series
+        score_val = score_series.iloc[0] if hasattr(score_series, "iloc") else score_series[0]  # type: ignore[index]
+        inst_val = inst_series.iloc[0] if hasattr(inst_series, "iloc") else inst_series[0]  # type: ignore[index]
+        attn_val = attn_series.iloc[0] if hasattr(attn_series, "iloc") else attn_series[0]  # type: ignore[index]
+        comprehensive_score = float(score_val)  # type: ignore[arg-type]
+        institution_participation = float(inst_val)  # type: ignore[arg-type]
+        attention_index = float(attn_val)  # type: ignore[arg-type]
 
         # Normalize comprehensive score (typically 0-100)
         score_normalized = (comprehensive_score - 50) / 25
@@ -432,6 +447,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = self._retry_with_backoff(ak.stock_individual_fund_flow, stock=code, market=market)
             self._set_cache(cache_key, df)
             return df
@@ -448,9 +464,9 @@ class AKShareSentimentFetcher:
         window = min(self.config.fund_flow_window, len(df))
         recent = df.tail(window)
 
-        main_inflow = recent["主力净流入-净额"].values
-        main_inflow_pct = recent["主力净流入-净占比"].values
-        super_large_inflow = recent["超大单净流入-净额"].values
+        main_inflow = recent["主力净流入-净额"].to_numpy()
+        main_inflow_pct = recent["主力净流入-净占比"].to_numpy()
+        super_large_inflow = recent["超大单净流入-净额"].to_numpy()
 
         total_main_inflow = float(np.sum(main_inflow))
         avg_main_inflow_pct = float(np.mean(main_inflow_pct))
@@ -471,7 +487,9 @@ class AKShareSentimentFetcher:
 
         normalized = float(np.clip(normalized, -1.0, 1.0))
 
-        consistency = 1.0 - float(np.std(main_inflow_pct)) / (abs(np.mean(main_inflow_pct)) + 1.0)
+        consistency = 1.0 - float(np.std(main_inflow_pct)) / (
+            abs(float(np.mean(main_inflow_pct))) + 1.0
+        )
         confidence = max(0.4, min(0.9, consistency))
 
         return SentimentDataPoint(
@@ -500,6 +518,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = self._retry_with_backoff(ak.stock_hsgt_individual_em, symbol=code)
             self._set_cache(cache_key, df)
             return df
@@ -516,8 +535,8 @@ class AKShareSentimentFetcher:
         window = min(self.config.northbound_window, len(df))
         recent = df.tail(window)
 
-        holdings_change = recent["今日增持股数"].values
-        holdings_pct = recent["持股数量占A股百分比"].values
+        holdings_change = recent["今日增持股数"].to_numpy()
+        holdings_pct = recent["持股数量占A股百分比"].to_numpy()
 
         total_change = float(np.sum(holdings_change))
         holdings_change_rate = 0.0
@@ -534,9 +553,9 @@ class AKShareSentimentFetcher:
         if len(holdings_change) >= 3:
             recent_changes = holdings_change[-2:]
             earlier_changes = holdings_change[:-2]
-            if np.mean(recent_changes) > np.mean(earlier_changes):
+            if float(np.mean(recent_changes)) > float(np.mean(earlier_changes)):
                 normalized += 0.15
-            elif np.mean(recent_changes) < np.mean(earlier_changes):
+            elif float(np.mean(recent_changes)) < float(np.mean(earlier_changes)):
                 normalized -= 0.15
 
         normalized = float(np.clip(normalized, -1.0, 1.0))
@@ -568,6 +587,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = self._retry_with_backoff(ak.stock_lhb_stock_statistic_em, symbol=period)
             self._set_cache(cache_key, df)
             return df
@@ -595,10 +615,19 @@ class AKShareSentimentFetcher:
                 metadata={"on_list": False},
             )
 
-        inst_buy_count = int(row["买方机构次数"].values[0])
-        inst_sell_count = int(row["卖方机构次数"].values[0])
-        inst_net_buy = float(row["机构买入净额"].values[0])
-        list_count = int(row["上榜次数"].values[0])
+        buy_series = row["买方机构次数"]
+        sell_series = row["卖方机构次数"]
+        net_series = row["机构买入净额"]
+        count_series = row["上榜次数"]
+        # Access first value from Series
+        buy_val = buy_series.iloc[0] if hasattr(buy_series, "iloc") else buy_series[0]  # type: ignore[index]
+        sell_val = sell_series.iloc[0] if hasattr(sell_series, "iloc") else sell_series[0]  # type: ignore[index]
+        net_val = net_series.iloc[0] if hasattr(net_series, "iloc") else net_series[0]  # type: ignore[index]
+        count_val = count_series.iloc[0] if hasattr(count_series, "iloc") else count_series[0]  # type: ignore[index]
+        inst_buy_count = int(buy_val)  # type: ignore[arg-type]
+        inst_sell_count = int(sell_val)  # type: ignore[arg-type]
+        inst_net_buy = float(net_val)  # type: ignore[arg-type]
+        list_count = int(count_val)  # type: ignore[arg-type]
 
         if inst_buy_count + inst_sell_count == 0:
             normalized = 0.0
@@ -638,6 +667,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = ak.stock_margin_account_info()
             self._set_cache(cache_key, df)
             return df
@@ -652,8 +682,8 @@ class AKShareSentimentFetcher:
             return None
 
         recent = df.tail(10)
-        margin_balance = recent["融资余额"].values
-        margin_buy = recent["融资买入额"].values
+        margin_balance = recent["融资余额"].to_numpy()
+        margin_buy = recent["融资买入额"].to_numpy()
 
         if len(margin_balance) >= 5:
             balance_change = float(margin_balance[-1] - margin_balance[-5])
@@ -694,6 +724,7 @@ class AKShareSentimentFetcher:
             return cached
 
         try:
+            assert ak is not None
             df = ak.stock_market_activity_legu()
             self._set_cache(cache_key, df)
             return df
@@ -1009,9 +1040,13 @@ class SentimentCollector:
                 }
 
                 try:
+                    assert self.session is not None
                     response = self.session.get(url, params=params, timeout=10)
                     response.raise_for_status()
-                    data = response.json()
+                    json_data = response.json()
+                    if json_data is None:
+                        break
+                    data = json_data
 
                     if not data or "Data" not in data:
                         break
@@ -1021,10 +1056,11 @@ class SentimentCollector:
                         break
 
                     for item in news_list:
-                        title = item.get("NoticesTitle", "")
-                        url = item.get("NoticesUrl", "")
-                        publish_time_str = item.get("NoticesTime", "")
-                        content = item.get("NoticesContent", "")
+                        item_dict = item if isinstance(item, dict) else {}
+                        title = item_dict.get("NoticesTitle", "")
+                        url = item_dict.get("NoticesUrl", "")
+                        publish_time_str = item_dict.get("NoticesTime", "")
+                        content = item_dict.get("NoticesContent", "")
 
                         if not title or not url:
                             continue
@@ -1081,6 +1117,7 @@ class SentimentCollector:
                 params = {"page": page}
 
                 try:
+                    assert self.session is not None
                     response = self.session.get(url, params=params, timeout=10)
                     response.raise_for_status()
 
@@ -1098,7 +1135,7 @@ class SentimentCollector:
                             continue
 
                         title = title_elem.get_text(strip=True)
-                        url = title_elem.get("href", "")
+                        url = str(title_elem.get("href", "")) if title_elem.has_attr("href") else ""
 
                         time_text = time_elem.get_text(strip=True) if time_elem else ""
                         try:
@@ -1251,7 +1288,9 @@ class SentimentCollector:
             conn.execute("BEGIN TRANSACTION")
 
             # Get next ID
-            max_id_result = conn.execute("SELECT COALESCE(MAX(id), 0) FROM sentiment_scores").fetchone()
+            max_id_result = conn.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM sentiment_scores"
+            ).fetchone()
             next_id = max_id_result[0] + 1 if max_id_result else 1
 
             for symbol, data in sentiment_data.items():
@@ -1260,6 +1299,7 @@ class SentimentCollector:
 
                 # Save composite sentiment - use stock_id column
                 from datetime import datetime
+
                 sentiment_ts = datetime.fromisoformat(data["timestamp"])
                 sentiment_date = sentiment_ts.date()
                 conn.execute(

@@ -60,8 +60,8 @@ class SentimentArbAdapter(SignalGenerator):
             if base_path.exists():
                 sys.path.insert(0, str(base_path))
 
-            from signal_generation import SignalConfig
-            from signal_generation import SignalGenerator as SentArbGenerator
+            from signal_generation import SignalConfig  # type: ignore
+            from signal_generation import SignalGenerator as SentArbGenerator  # type: ignore
 
             # Convert config
             sa_config = SignalConfig(
@@ -267,10 +267,10 @@ class ContrarianAdapter(SignalGenerator):
             if base_path.exists():
                 sys.path.insert(0, str(base_path))
 
-            from sentiment import SentimentAnalyzer
-            from signals import SignalConfig
-            from signals import SignalGenerator as ContrarianGenerator
-            from valuation import ValuationCalculator
+            from sentiment import SentimentAnalyzer  # type: ignore
+            from signals import SignalConfig  # type: ignore
+            from signals import SignalGenerator as ContrarianGenerator  # type: ignore
+            from valuation import ValuationCalculator  # type: ignore
 
             # Convert config
             sig_config = SignalConfig(

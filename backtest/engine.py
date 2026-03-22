@@ -130,7 +130,6 @@ class BacktestEngineImpl(BacktestEngine):
         logger.info(f"  Trading days: {len(trading_dates)}")
 
         # Main backtest loop
-        prev_date = None
         for current_date in trading_dates:
             # Get current prices
             current_prices = self._get_prices_for_date(price_data, current_date)
@@ -177,8 +176,6 @@ class BacktestEngineImpl(BacktestEngine):
             if self.config.max_drawdown_stop and drawdown >= self.config.max_drawdown_stop:
                 logger.warning(f"Max drawdown stop triggered at {drawdown:.2%}")
                 break
-
-            prev_date = current_date
 
         # Calculate final metrics
         result = self._calculate_metrics(state, initial_capital, start, end)
@@ -318,6 +315,93 @@ class BacktestEngineImpl(BacktestEngine):
             fill_price *= 1 - self._slippage_rate
 
         return fill_price
+
+    def _execute_order(
+        self,
+        state: BacktestState,
+        order: Order,
+        fill_price: float,
+        current_date: datetime,
+    ) -> None:
+        """Execute an order and create corresponding trade and position"""
+        symbol = order.symbol
+        quantity = order.quantity
+        side = order.side
+
+        # Calculate commission
+        notional = quantity * fill_price
+        commission = max(notional * self._commission_rate, self._min_commission)
+
+        if side == "BUY":
+            # Update cash
+            state.cash -= notional + commission
+
+            # Create or update position
+            if symbol in state.positions:
+                # Add to existing position
+                existing_pos = state.positions[symbol]
+                total_quantity = existing_pos.quantity + quantity
+                # Weighted average entry price
+                total_cost = (
+                    existing_pos.entry_price * existing_pos.quantity + fill_price * quantity
+                )
+                new_entry_price = total_cost / total_quantity
+                existing_pos.quantity = total_quantity
+                existing_pos.entry_price = new_entry_price
+            else:
+                # Create new position
+                state.positions[symbol] = Position(
+                    symbol=symbol,
+                    side="long",
+                    quantity=quantity,
+                    entry_price=fill_price,
+                    entry_time=current_date,
+                    current_price=fill_price,
+                )
+        else:  # SELL
+            # Calculate stamp duty (China A-shares, sell only)
+            stamp_duty = notional * self._stamp_duty
+            total_commission = commission + stamp_duty
+
+            # Update cash
+            state.cash += notional - total_commission
+
+            # Update or close position
+            if symbol in state.positions:
+                existing_pos = state.positions[symbol]
+                if quantity >= existing_pos.quantity:
+                    # Close position
+                    del state.positions[symbol]
+                else:
+                    # Partial close
+                    existing_pos.quantity -= quantity
+            else:
+                # Short position (create new)
+                state.positions[symbol] = Position(
+                    symbol=symbol,
+                    side="short",
+                    quantity=quantity,
+                    entry_price=fill_price,
+                    entry_time=current_date,
+                    current_price=fill_price,
+                )
+
+        # Create trade record
+        slippage_amount = abs(fill_price - order.limit_price if order.limit_price else 0) * quantity
+        trade = Trade(
+            trade_id=f"{symbol}_{current_date.strftime('%Y%m%d_%H%M%S')}",
+            order_id=order.order_id,
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=fill_price,
+            timestamp=current_date,
+            commission=commission,
+            slippage=slippage_amount,
+        )
+        state.trades.append(trade)
+
+        logger.debug(f"Executed {side} {symbol}: {quantity} @ ¥{fill_price:.2f}")
 
     def _process_signal(
         self,

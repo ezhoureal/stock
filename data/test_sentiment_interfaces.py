@@ -11,13 +11,13 @@ print("=" * 60)
 
 try:
     from data.collect_sentiment import (
-        AKShareSentimentFetcher,
         AKShareSentimentConfig,
-        SentimentDataPoint,
-        SentimentCollector,
+        AKShareSentimentFetcher,
         NewsArticle,
-        SentimentCollectionError,
+        SentimentCollector,
+        SentimentDataPoint,
     )
+
     print("✓ All imports successful")
 except ImportError as e:
     print(f"✗ Import failed: {e}")
@@ -104,7 +104,9 @@ try:
         test_symbol = df.iloc[0]["代码"]
         sentiment = fetcher.get_hot_rank_sentiment(test_symbol)
         if sentiment:
-            print(f"✓ Got hot rank sentiment for {test_symbol}: normalized={sentiment.normalized:.3f}")
+            print(
+                f"✓ Got hot rank sentiment for {test_symbol}: normalized={sentiment.normalized:.3f}"
+            )
         else:
             print(f"  Could not get sentiment for {test_symbol}")
     else:
@@ -155,8 +157,10 @@ try:
         raw_score=dp.raw_value,
         metadata=dp.metadata,
     )
-    print(f"✓ Successfully created SentimentScore from SentimentDataPoint")
-    print(f"  SentimentScore: symbol={score.symbol}, score={score.score:.3f}, confidence={score.confidence:.2f}")
+    print("✓ Successfully created SentimentScore from SentimentDataPoint")
+    print(
+        f"  SentimentScore: symbol={score.symbol}, score={score.score:.3f}, confidence={score.confidence:.2f}"
+    )
 except Exception as e:
     print(f"✗ SentimentScore compatibility test failed: {e}")
     sys.exit(1)
@@ -169,7 +173,9 @@ print("=" * 60)
 try:
     # Test that SentimentCollector has the expected methods
     assert hasattr(SentimentCollector, "collect_sentiment"), "Missing collect_sentiment method"
-    assert hasattr(SentimentCollector, "collect_akshare_sentiment"), "Missing collect_akshare_sentiment method"
+    assert hasattr(SentimentCollector, "collect_akshare_sentiment"), (
+        "Missing collect_akshare_sentiment method"
+    )
     assert hasattr(SentimentCollector, "save_sentiment_data"), "Missing save_sentiment_data method"
     print("✓ SentimentCollector has all required methods")
 except Exception as e:
@@ -209,7 +215,9 @@ try:
 
     # Check that DuckDBDataProvider has the required methods
     assert hasattr(DuckDBDataProvider, "get_sentiment"), "Missing get_sentiment method"
-    assert hasattr(DuckDBDataProvider, "get_latest_sentiment"), "Missing get_latest_sentiment method"
+    assert hasattr(DuckDBDataProvider, "get_latest_sentiment"), (
+        "Missing get_latest_sentiment method"
+    )
     print("✓ DuckDBDataProvider has required sentiment methods")
 except Exception as e:
     print(f"✗ DataProvider compatibility test failed: {e}")

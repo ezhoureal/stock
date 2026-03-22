@@ -4,6 +4,12 @@ Main entry point for Broker Integration System
 
 import argparse
 import logging
+import os
+import sys
+from typing import Any
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from broker.base import Order, OrderSide, OrderStatus, OrderType
 from broker.mock import MockBroker
@@ -11,10 +17,13 @@ from order.models import OrderRequest
 from position.tracker import PositionTracker
 from risk.controls import RiskLimit, RiskManager
 
-from config import Config
+# Import Config from local config module
+import config as config_module  # noqa: E402
+
+Config = config_module.Config  # type: ignore[attr-defined]
 
 
-def setup_logging(config: Config) -> logging.Logger:
+def setup_logging(config: Any) -> logging.Logger:
     """Setup logging"""
     logger = logging.getLogger("broker")
     logger.setLevel(getattr(logging, config.logging.log_level))
@@ -72,7 +81,11 @@ def test_paper_trading(logger: logging.Logger) -> None:
 
     # Test order 1: Buy Moutai
     logger.info("\n=== Test 1: Buy Moutai ===")
-    price = broker.get_market_price("600519.SH")
+    price_opt = broker.get_market_price("600519.SH")
+    if price_opt is None:
+        logger.error("Failed to get market price for 600519.SH")
+        return
+    price: float = price_opt
 
     order_request = OrderRequest(
         symbol="600519.SH",
@@ -83,8 +96,9 @@ def test_paper_trading(logger: logging.Logger) -> None:
     )
 
     # Validate order
-    current_positions = {pos.symbol: pos.quantity for pos in broker.get_positions()}
-    market_prices = {"600519.SH": price}
+    current_positions = {pos.symbol: int(pos.quantity) for pos in broker.get_positions()}
+    # Only include prices that are not None
+    market_prices: dict[str, float] = {"600519.SH": price}
 
     validation_error = risk_manager.validate_order_request(
         order_request,
@@ -108,16 +122,21 @@ def test_paper_trading(logger: logging.Logger) -> None:
 
         # Update position tracker
         if result.status == OrderStatus.FILLED:
+            fill_price = order_request.price if order_request.price is not None else price
             position_tracker.update_position(
                 order_request.symbol,
                 order_request.quantity,
-                order_request.price or price,
+                fill_price,
             )
             logger.info(f"Position updated: {position_tracker.get_position('600519.SH')}")
 
     # Test order 2: Buy Wuliangye
     logger.info("\n=== Test 2: Buy Wuliangye ===")
-    price = broker.get_market_price("000858.SZ")
+    price_opt = broker.get_market_price("000858.SZ")
+    if price_opt is None:
+        logger.error("Failed to get market price for 000858.SZ")
+        return
+    price_wl: float = price_opt
 
     order_request = OrderRequest(
         symbol="000858.SZ",
@@ -126,11 +145,12 @@ def test_paper_trading(logger: logging.Logger) -> None:
         quantity=200,
     )
 
+    market_prices_wl: dict[str, float] = {"000858.SZ": price_wl}
     validation_error = risk_manager.validate_order_request(
         order_request,
-        {pos.symbol: pos.quantity for pos in broker.get_positions()},
+        {pos.symbol: int(pos.quantity) for pos in broker.get_positions()},
         account.cash,
-        {"000858.SZ": price},
+        market_prices_wl,
     )
 
     if not validation_error:
@@ -144,10 +164,11 @@ def test_paper_trading(logger: logging.Logger) -> None:
         logger.info(f"Order placed: {result.order_id} - Status: {result.status.value}")
 
         if result.status == OrderStatus.FILLED:
+            fill_price = order_request.price if order_request.price is not None else price_wl
             position_tracker.update_position(
                 order_request.symbol,
                 order_request.quantity,
-                price,
+                fill_price,
             )
             logger.info(f"Position updated: {position_tracker.get_position('000858.SZ')}")
 
@@ -155,7 +176,7 @@ def test_paper_trading(logger: logging.Logger) -> None:
     logger.info("\n=== Current Positions ===")
     positions = broker.get_positions()
     for pos in positions:
-        logger.info(f"{pos.symbol}: {pos.quantity} shares @ ¥{pos.avg_cost:.2f}")
+        logger.info(f"{pos.symbol}: {pos.quantity} shares @ ¥{pos.entry_price:.2f}")
 
     # Check account
     logger.info("\n=== Account Summary ===")
@@ -172,14 +193,20 @@ def test_paper_trading(logger: logging.Logger) -> None:
             symbol="600519.SH",
             side=OrderSide.SELL,
             order_type=OrderType.MARKET,
-            quantity=moutai_pos.quantity // 2,
+            quantity=int(moutai_pos.quantity // 2),
         )
 
+        price_sell_opt = broker.get_market_price("600519.SH")
+        if price_sell_opt is None:
+            logger.error("Failed to get market price for 600519.SH")
+            return
+        price_sell: float = price_sell_opt
+        market_prices_mt: dict[str, float] = {"600519.SH": price_sell}
         validation_error = risk_manager.validate_order_request(
             order_request,
-            {pos.symbol: pos.quantity for pos in broker.get_positions()},
+            {pos.symbol: int(pos.quantity) for pos in broker.get_positions()},
             account.cash,
-            {"600519.SH": broker.get_market_price("600519.SH")},
+            market_prices_mt,
         )
 
         if not validation_error:

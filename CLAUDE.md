@@ -1,7 +1,4 @@
 # CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 A Chinese stock trading system with multiple strategies and live trading infrastructure. The codebase consists of independent modules that can operate separately but share data infrastructure through the `common` module.
@@ -10,44 +7,14 @@ A Chinese stock trading system with multiple strategies and live trading infrast
 
 ### Setup and Installation
 
-Uses uv for dependency management with optional dependency groups:
+Uses uv for dependency management:
 
 ```bash
 # Install uv if not already installed
 curl -LsSf https://docs.astral.sh/uv | sh
 
-# Create virtual environment and install dependencies
-uv venv
-
-# Install with specific dependency groups
-uv pip install -e ".[data,sentiment,broker,dev]"  # All optional deps
-uv pip install -e ".[data]"                       # Data pipeline only
-uv pip install -e ".[sentiment]"                  # Sentiment arbitrage only
-uv pip install -e ".[broker]"                     # Broker integration only
-uv pip install -e ".[dev]"                        # Development tools only
-
-# Install everything (core + all optional)
-uv pip install -e ".[all]"
-```
-
-### Running the System
-
-All commands should be run from the project root unless otherwise noted:
-
-**Sentiment Strategy (Contrarian Trading):**
-```bash
-uv run python sentiment_strategy/valuation.py    # Test valuation calculator
-uv run python sentiment_strategy/sentiment.py    # Test sentiment analyzer
-uv run python sentiment_strategy/signals.py      # Test signal generator
-uv run python sentiment_strategy/example.py      # Full demo
-```
-
-**Data Pipeline:**
-```bash
-uv run python data/init_db.py                       # Initialize DuckDB database
-uv run python data/collect_csi300.py                # Fetch CSI 300 constituents
-uv run python data/collect_historical_prices.py     # Collect price data
-uv run python data/collect_historical_prices.py -- --years 3  # Extended history
+# Install dependencies (creates virtual environment automatically)
+uv sync
 ```
 
 **Broker/Live Trading (run from broker/python/):**
@@ -81,55 +48,11 @@ uv run ruff check .           # Check for issues
 uv run ruff check --fix .     # Auto-fix issues
 uv run ruff format .          # Format code
 
-# Alternative linter
-uv run flake8 .
+# Type checking (REQUIRED before commits)
+uv run pyright .              # Check for type errors
 ```
 
 ## Architecture
-
-```
-stock/
-├── common/                    # Shared infrastructure (core module)
-│   ├── types.py               # Core data types (Signal, Position, Order, Trade, etc.)
-│   ├── interfaces.py          # Abstract interfaces (DataProvider, SignalGenerator, etc.)
-│   ├── config.py              # Configuration dataclasses
-│   ├── signal_router.py       # Routes signals to execution
-│   ├── strategy_adapters.py   # Adapters for different strategies
-│   └── orchestrator.py        # TradingSystem class, quick_backtest helper
-│
-├── sentiment_strategy/        # Contrarian strategy (sentiment + fundamental valuation)
-│   ├── valuation.py           # Intrinsic value calculator (P/E, P/B, PEG, dividend)
-│   ├── sentiment.py           # Multi-source sentiment aggregation
-│   ├── signals.py             # Signal generator combining sentiment + valuation
-│   ├── example.py             # Demo script
-│   └── config.json            # Strategy configuration
-│
-├── backtest/                  # Backtesting engine
-│   └── engine.py              # BacktestEngineImpl with realistic execution simulation
-│
-├── data/                      # Data collection pipeline
-│   ├── init_db.py             # DuckDB schema initialization
-│   ├── collect_csi300.py      # CSI 300 constituent collection
-│   ├── collect_historical_prices.py  # Historical price data
-│   ├── collect_sentiment.py   # Sentiment data collection
-│   └── providers/             # Data providers (DuckDB, etc.)
-│
-├── broker/                    # Live trading infrastructure
-│   ├── .env                   # Broker configuration (copy from .env.example)
-│   └── python/
-│       ├── broker/            # Broker abstraction (mock + Futu API)
-│       │   ├── base.py        # Base broker interface
-│       │   └── mock.py        # Mock broker for testing
-│       ├── order/             # Order management and models
-│       ├── position/          # Position tracking and P&L
-│       ├── risk/              # Risk controls and position limits
-│       ├── main.py            # Entry point for paper trading
-│       └── test_simple.py     # Mock broker test
-│
-├── high_freq_sentiment/       # High-frequency sentiment processing
-├── examples/                  # Usage examples and integration tests
-└── config/                    # Global configuration files
-```
 
 ## Key Architectural Patterns
 
@@ -187,6 +110,7 @@ For live trading with Futu, configure `broker/.env`:
 ## Coding Guidelines
 
 ### Code Quality (REQUIRED)
+
 Always run these before committing Python code:
 
 ```bash
@@ -194,18 +118,14 @@ Always run these before committing Python code:
 uv run ruff check --fix .
 uv run ruff format .
 
+# Type check
+uv run pyright .
+
 # Run tests to verify changes
 uv run pytest
 ```
 
-### Ruff Configuration
-Project uses ruff with settings in `pyproject.toml`:
-- Line length: 100
-- Target: Python 3.13
-- Enabled rules: E, F, W, I, N, UP, B (pycodestyle, pyflakes, warnings, isort, naming, upgrade, bugbear)
-
-### Python Version
-Python 3.13 (specified in `.python-version`)
+**All code must pass both Ruff and Pyright with zero errors before committing.**
 
 ### Type Hints
 Use modern Python 3.13 type hints:
@@ -223,7 +143,3 @@ Use absolute imports from package root:
 from common.types import TradingSignal, Position
 from sentiment_strategy.signals import SignalGenerator
 ```
-
-## GPU Requirements
-
-The `high_freq_sentiment` module requires NVIDIA GPU with CUDA 12.x (uses CuPy). Install appropriate CuPy version for your CUDA setup.

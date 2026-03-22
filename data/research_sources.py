@@ -96,7 +96,7 @@ try:
 
         # Test CSI 300
         try:
-            df_csi300 = ak.index_stock_cons(index="000300")
+            df_csi300 = ak.index_stock_cons(symbol="000300")
             print(f"✓ Retrieved {len(df_csi300)} CSI 300 constituents")
             print(f"  Sample: {df_csi300.head(3).to_dict('records')}")
             results["akshare"]["csi300_test"] = True
@@ -180,8 +180,9 @@ try:
                 adjustflag="3",
             )
             data_list = []
-            while (rs.error_code == "0") & rs.next():
-                data_list.append(rs.get_row_data())
+            if rs is not None and rs.error_code == "0":
+                while rs.next():
+                    data_list.append(rs.get_row_data())
             print(f"✓ Retrieved {len(data_list)} days of price data for sh.600000")
             print(f"  Sample: {data_list[:3]}")
             results["baostock"]["price_test"] = True

@@ -183,8 +183,7 @@ class DataProvider(ABC):
             bars = self.get_bars(symbol, start, end, timeframe)
             all_bars.extend(bars)
         all_bars.sort(key=lambda b: b.timestamp)
-        for bar in all_bars:
-            yield bar
+        yield from all_bars
 
 
 class SignalGenerator(ABC):

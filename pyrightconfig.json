@@ -1,0 +1,26 @@
+{
+  "include": [
+    "broker/python",
+    "common",
+    "data",
+    "backtest",
+    "sentiment_strategy",
+    "examples"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "**/.*"
+  ],
+  "ignore": [
+    "**/high_freq_sentiment"
+  ],
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Linux",
+  "stubPath": "",
+  "extraPaths": [
+    "broker/python"
+  ]
+}

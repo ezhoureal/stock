@@ -38,8 +38,8 @@ class SystemState:
     """Current state of the trading system"""
 
     last_run: datetime | None = None
-    active_positions: dict[str, Any] = None
-    pending_orders: dict[str, Any] = None
+    active_positions: dict[str, Any] | None = None
+    pending_orders: dict[str, Any] | None = None
     daily_pnl: float = 0.0
     total_equity: float = 0.0
 
@@ -102,7 +102,7 @@ class TradingSystem:
 
         # Initialize signal router
         self._router = SignalRouterImpl(self.config.router)
-        for name, strategy in self._strategies.items():
+        for strategy in self._strategies.values():
             self._router.add_strategy(strategy)
         logger.info("Signal router initialized")
 
@@ -131,6 +131,8 @@ class TradingSystem:
 
         # Get universe if no symbols specified
         if symbols is None:
+            if self._data_provider is None:
+                raise RuntimeError("Data provider not initialized")
             symbols = self._data_provider.get_universe(self.config.data.default_universe)
 
         if not symbols:
@@ -138,6 +140,10 @@ class TradingSystem:
             return PortfolioSignal(signals=[], timestamp=as_of)
 
         # Generate and aggregate signals
+        if self._router is None:
+            raise RuntimeError("Signal router not initialized")
+        if self._data_provider is None:
+            raise RuntimeError("Data provider not initialized")
         portfolio = self._router.aggregate_signals(
             symbols,
             as_of,
@@ -185,6 +191,8 @@ class TradingSystem:
 
         # Get universe
         if symbols is None:
+            if self._data_provider is None:
+                raise RuntimeError("Data provider not initialized")
             symbols = self._data_provider.get_universe(self.config.data.default_universe)
 
         # Get strategy
@@ -194,9 +202,13 @@ class TradingSystem:
             strategy = self._strategies[strategy_name]
         else:
             # Use combined router as strategy
+            if self._router is None:
+                raise RuntimeError("Signal router not initialized")
             strategy = CombinedStrategy(self._router, self._strategies)
 
         # Run backtest
+        if self._data_provider is None:
+            raise RuntimeError("Data provider not initialized")
         engine = BacktestEngineImpl(self._data_provider, self.config.backtest)
         result = engine.run(
             strategy,
@@ -270,6 +282,8 @@ class TradingSystem:
                         source_signal=signal.source,
                     )
 
+                    # Type narrowing: we know _execution_client is not None here
+                    assert self._execution_client is not None
                     submitted = self._execution_client.submit_order(order)
                     result["status"] = "submitted"
                     result["order_id"] = submitted.order_id
@@ -314,6 +328,8 @@ class TradingSystem:
             self.initialize()
 
         self._strategies[strategy.name] = strategy
+        if self._router is None:
+            raise RuntimeError("Signal router not initialized")
         self._router.add_strategy(strategy)
         logger.info(f"Added strategy: {strategy.name}")
 
@@ -321,6 +337,8 @@ class TradingSystem:
         """Remove a strategy"""
         if strategy_name in self._strategies:
             del self._strategies[strategy_name]
+            if self._router is None:
+                raise RuntimeError("Signal router not initialized")
             self._router.remove_strategy(strategy_name)
             logger.info(f"Removed strategy: {strategy_name}")
 
@@ -328,13 +346,14 @@ class TradingSystem:
         """Shutdown the system gracefully"""
         logger.info("Shutting down trading system...")
 
-        # Close data provider
-        if self._data_provider:
-            if hasattr(self._data_provider, "close"):
-                self._data_provider.close()
+        # Close data provider (if it has a close method)
+        if self._data_provider is not None:
+            close_method = getattr(self._data_provider, "close", None)
+            if callable(close_method):
+                close_method()  # type: ignore[call-arg]
 
         # Disconnect broker
-        if self._execution_client:
+        if self._execution_client is not None:
             self._execution_client.disconnect()
 
         self._initialized = False

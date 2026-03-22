@@ -238,13 +238,18 @@ def main():
 
     # Verify
     print("\nVerifying data...")
-    total_count = conn.execute("SELECT COUNT(*) FROM stocks WHERE stock_id != 'SYSTEM'").fetchone()[
-        0
-    ]
-    csi300_count = conn.execute("SELECT COUNT(*) FROM stocks WHERE is_csi300 = TRUE").fetchone()[0]
-    non_csi300_count = conn.execute(
+    total_count_result = conn.execute(
+        "SELECT COUNT(*) FROM stocks WHERE stock_id != 'SYSTEM'"
+    ).fetchone()
+    total_count = total_count_result[0] if total_count_result else 0
+    csi300_count_result = conn.execute(
+        "SELECT COUNT(*) FROM stocks WHERE is_csi300 = TRUE"
+    ).fetchone()
+    csi300_count = csi300_count_result[0] if csi300_count_result else 0
+    non_csi300_count_result = conn.execute(
         "SELECT COUNT(*) FROM stocks WHERE is_csi300 = FALSE AND stock_id != 'SYSTEM'"
-    ).fetchone()[0]
+    ).fetchone()
+    non_csi300_count = non_csi300_count_result[0] if non_csi300_count_result else 0
 
     print(f"✓ Total stocks in database: {total_count}")
     print(f"✓ CSI 300 stocks: {csi300_count}")
@@ -265,12 +270,14 @@ def main():
 
     # Show market distribution
     print("\nMarket distribution:")
-    sh_count = conn.execute(
+    sh_count_result = conn.execute(
         "SELECT COUNT(*) FROM stocks WHERE ts_code LIKE '%.SH' AND stock_id != 'SYSTEM'"
-    ).fetchone()[0]
-    sz_count = conn.execute(
+    ).fetchone()
+    sh_count = sh_count_result[0] if sh_count_result else 0
+    sz_count_result = conn.execute(
         "SELECT COUNT(*) FROM stocks WHERE ts_code LIKE '%.SZ' AND stock_id != 'SYSTEM'"
-    ).fetchone()[0]
+    ).fetchone()
+    sz_count = sz_count_result[0] if sz_count_result else 0
     print(f"  Shanghai (SH): {sh_count}")
     print(f"  Shenzhen (SZ): {sz_count}")
 

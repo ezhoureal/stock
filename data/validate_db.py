@@ -15,6 +15,7 @@ import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 # Configure logging
 _LOG_DIR = Path(__file__).parent / "logs"
@@ -100,11 +101,27 @@ class DatabaseValidator:
             self.conn.close()
             self.conn = None
 
+    def _get_connection(self) -> Any:
+        """
+        Get the database connection, ensuring it's not None.
+
+        Returns:
+            The database connection
+
+        Raises:
+            RuntimeError: If connection is None
+        """
+        if self.conn is None:
+            raise RuntimeError("Database connection is not established")
+        return self.conn
+
     def validate_schema(self) -> ValidationResult:
         """Validate database schema"""
         result = ValidationResult("Schema Validation")
 
         try:
+            conn = self._get_connection()
+
             # Check if required tables exist
             required_tables = [
                 "stocks",
@@ -116,7 +133,7 @@ class DatabaseValidator:
             ]
 
             for table in required_tables:
-                tables = self.conn.execute("SHOW TABLES").fetchall()
+                tables = conn.execute("SHOW TABLES").fetchall()
                 table_names = [t[0] for t in tables]
 
                 if table not in table_names:
@@ -133,7 +150,7 @@ class DatabaseValidator:
 
             for table, columns in critical_columns.items():
                 try:
-                    columns_info = self.conn.execute(f"PRAGMA table_info('{table}')").fetchall()
+                    columns_info = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
                     existing_columns = {col[1] for col in columns_info}
 
                     for col in columns:
@@ -152,8 +169,10 @@ class DatabaseValidator:
         result = ValidationResult("Price Data Quality")
 
         try:
+            conn = self._get_connection()
+
             # Check for NULL values in critical columns
-            null_check = self.conn.execute("""
+            null_check = conn.execute("""
                 SELECT
                     SUM(CASE WHEN open IS NULL THEN 1 ELSE 0 END) as null_open,
                     SUM(CASE WHEN high IS NULL THEN 1 ELSE 0 END) as null_high,
@@ -186,7 +205,7 @@ class DatabaseValidator:
                             )
 
             # Check for price anomalies (high < low, prices <= 0)
-            anomalies = self.conn.execute("""
+            anomalies = conn.execute("""
                 SELECT
                     SUM(CASE WHEN high < low THEN 1 ELSE 0 END) as high_less_than_low,
                     SUM(CASE WHEN open <= 0 THEN 1 ELSE 0 END) as non_positive_open,
@@ -205,7 +224,7 @@ class DatabaseValidator:
                     result.add_issue(f"{anomalies[i + 1]} rows with non-positive {col}")
 
             # Check for extreme outliers (price changes > 50% in one day)
-            outliers = self.conn.execute("""
+            outliers = conn.execute("""
                 SELECT COUNT(*) FROM (
                     SELECT
                         stock_id,
@@ -223,7 +242,7 @@ class DatabaseValidator:
                 )
 
             # Check data coverage by date
-            coverage = self.conn.execute("""
+            coverage = conn.execute("""
                 SELECT
                     MIN(date) as earliest_date,
                     MAX(date) as latest_date,
@@ -256,8 +275,10 @@ class DatabaseValidator:
         result = ValidationResult("Stocks Data Quality")
 
         try:
+            conn = self._get_connection()
+
             # Check for CSI 300 stocks
-            csi300_count = self.conn.execute("""
+            csi300_count = conn.execute("""
                 SELECT COUNT(*) FROM stocks WHERE is_csi300 = TRUE
             """).fetchone()[0]
 
@@ -265,14 +286,14 @@ class DatabaseValidator:
                 result.add_issue(f"Only {csi300_count} CSI 300 stocks in database (expected 300)")
 
             # Check for active stocks
-            active_count = self.conn.execute("""
+            active_count = conn.execute("""
                 SELECT COUNT(*) FROM stocks WHERE is_active = TRUE
             """).fetchone()[0]
 
             self.logger.info(f"Stocks: {active_count} active, {csi300_count} CSI 300")
 
             # Check for missing stock IDs or names
-            missing_data = self.conn.execute("""
+            missing_data = conn.execute("""
                 SELECT COUNT(*) FROM stocks
                 WHERE stock_id IS NULL OR name IS NULL OR name = ''
             """).fetchone()[0]
@@ -281,7 +302,7 @@ class DatabaseValidator:
                 result.add_issue(f"{missing_data} stocks with missing ID or name")
 
             # Check for duplicates
-            duplicates = self.conn.execute("""
+            duplicates = conn.execute("""
                 SELECT stock_id, COUNT(*) as cnt
                 FROM stocks
                 GROUP BY stock_id
@@ -301,8 +322,10 @@ class DatabaseValidator:
         result = ValidationResult("News Data Quality")
 
         try:
+            conn = self._get_connection()
+
             # Check for news data
-            news_count = self.conn.execute("SELECT COUNT(*) FROM news_raw").fetchone()[0]
+            news_count = conn.execute("SELECT COUNT(*) FROM news_raw").fetchone()[0]
 
             if news_count == 0:
                 result.add_suggestion("No news data collected yet")
@@ -311,7 +334,7 @@ class DatabaseValidator:
             self.logger.info(f"News articles: {news_count}")
 
             # Check for NULL titles
-            null_titles = self.conn.execute("""
+            null_titles = conn.execute("""
                 SELECT COUNT(*) FROM news_raw
                 WHERE title IS NULL OR title = ''
             """).fetchone()[0]
@@ -320,7 +343,7 @@ class DatabaseValidator:
                 result.add_issue(f"{null_titles} articles with NULL or empty title")
 
             # Check for missing URLs
-            null_urls = self.conn.execute("""
+            null_urls = conn.execute("""
                 SELECT COUNT(*) FROM news_raw
                 WHERE url IS NULL OR url = ''
             """).fetchone()[0]
@@ -329,7 +352,7 @@ class DatabaseValidator:
                 result.add_issue(f"{null_urls} articles with NULL or empty URL")
 
             # Check for duplicates
-            duplicates = self.conn.execute("""
+            duplicates = conn.execute("""
                 SELECT url, COUNT(*) as cnt
                 FROM news_raw
                 GROUP BY url
@@ -340,7 +363,7 @@ class DatabaseValidator:
                 result.add_issue(f"Found {len(duplicates)} duplicate news URLs")
 
             # Check news recency
-            latest_news = self.conn.execute("""
+            latest_news = conn.execute("""
                 SELECT MAX(publish_time) as latest
                 FROM news_raw
             """).fetchone()
@@ -362,8 +385,10 @@ class DatabaseValidator:
         result = ValidationResult("Fundamental Data Quality")
 
         try:
+            conn = self._get_connection()
+
             # Check for fundamental data
-            fund_count = self.conn.execute("SELECT COUNT(*) FROM fundamentals").fetchone()[0]
+            fund_count = conn.execute("SELECT COUNT(*) FROM fundamentals").fetchone()[0]
 
             if fund_count == 0:
                 result.add_suggestion("No fundamental data collected yet")
@@ -374,7 +399,7 @@ class DatabaseValidator:
             # Check for critical columns
             critical_metrics = ["pe_ratio", "pb_ratio", "roe"]
             for metric in critical_metrics:
-                null_count = self.conn.execute(f"""
+                null_count = conn.execute(f"""
                     SELECT COUNT(*) FROM fundamentals WHERE {metric} IS NULL
                 """).fetchone()[0]
 
@@ -383,7 +408,7 @@ class DatabaseValidator:
                     result.add_suggestion(f"Metric {metric}: {null_pct:.1f}% NULL values")
 
             # Check data recency
-            latest_fund = self.conn.execute("""
+            latest_fund = conn.execute("""
                 SELECT MAX(report_date) as latest
                 FROM fundamentals
             """).fetchone()
@@ -423,9 +448,11 @@ class DatabaseValidator:
     def _auto_fix_issues(self, result: ValidationResult):
         """Automatically fix issues in a validation result"""
         try:
+            conn = self._get_connection()
+
             if "high < low" in str(result.issues):
                 self.logger.info("Fixing rows where high < low...")
-                self.conn.execute("""
+                conn.execute("""
                     DELETE FROM daily_prices WHERE high < low
                 """)
                 self.logger.info("✓ Removed invalid rows")

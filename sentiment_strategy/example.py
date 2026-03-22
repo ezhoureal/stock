@@ -359,7 +359,7 @@ def example_position_tracking():
     # Scenario 1: Price hits stop-loss
     print("\n--- Scenario 1: Stop-Loss Hit ---")
     current_price = 91.5  # Below stop-loss
-    exit_result = signal_generator._check_exit_conditions(position, current_price)
+    exit_result = signal_generator.check_exit_conditions(position, current_price)
     if exit_result:
         exit_type, reasons = exit_result
         print(f"Exit Signal: {exit_type.value}")
@@ -368,7 +368,7 @@ def example_position_tracking():
     # Scenario 2: Price hits take-profit
     print("\n--- Scenario 2: Take-Profit Hit ---")
     current_price = 116.0  # Above take-profit
-    exit_result = signal_generator._check_exit_conditions(position, current_price)
+    exit_result = signal_generator.check_exit_conditions(position, current_price)
     if exit_result:
         exit_type, reasons = exit_result
         print(f"Exit Signal: {exit_type.value}")
@@ -403,7 +403,7 @@ def example_position_tracking():
     print(f"New Sentiment: {sentiment.smoothed_score:.2f} (was bearish)")
     print(f"Rate of Change: {sentiment.roc:.2f}")
 
-    exit_result = signal_generator._check_exit_conditions(
+    exit_result = signal_generator.check_exit_conditions(
         position, current_price, sentiment=sentiment
     )
     if exit_result:

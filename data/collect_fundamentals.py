@@ -59,7 +59,7 @@ def fetch_sector_classifications(ak: object, logger: logging.Logger) -> dict[str
     """
     try:
         logger.info("Fetching sector classifications from Shenwan (申万)...")
-        df = ak.stock_industry_clf_hist_sw()
+        df = ak.stock_industry_clf_hist_sw()  # type: ignore[attr-defined]
 
         if df is None or df.empty:
             logger.warning("No sector classification data returned")
@@ -120,7 +120,7 @@ def fetch_sw_sector_metrics(
     level1_metrics = {}
     try:
         logger.info("Fetching Shenwan Level 1 sector metrics for reference...")
-        df_l1 = ak.sw_index_first_info()
+        df_l1 = ak.sw_index_first_info()  # type: ignore[attr-defined]
         if df_l1 is not None and not df_l1.empty:
             for _, row in df_l1.iterrows():
                 sector_code = str(row["行业代码"]).replace(".SI", "")
@@ -143,21 +143,53 @@ def fetch_sw_sector_metrics(
     # For each unique level-3 sector, assign appropriate level-1 metrics
     # based on industry category
     sector_name_map = {
-        "11": "农林牧渔", "12": "食品饮料", "13": "纺织服饰",
-        "21": "煤炭", "22": "石油石化", "23": "基础化工",
-        "24": "钢铁", "25": "有色金属", "26": "建筑材料", "27": "机械设备",
-        "28": "汽车", "29": "国防军工", "30": "房地产",
-        "31": "轻工制造", "32": "医药生物", "33": "家用电器",
-        "34": "商贸零售", "35": "社会服务", "36": "银行",
-        "37": "非银金融", "38": "综合", "39": "建筑材料",
-        "41": "公用事业", "42": "交通运输", "43": "房地产",
-        "44": "建筑装饰", "45": "建筑材料", "46": "机械设备",
-        "47": "国防军工", "48": "银行", "49": "非银金融",
-        "51": "电子", "52": "计算机", "53": "传媒", "54": "通信",
-        "61": "综合", "62": "建筑装饰", "63": "机械设备",
-        "64": "电力设备", "65": "计算机", "66": "传媒",
-        "71": "环保", "72": "公用事业", "73": "通信",
-        "74": "传媒", "75": "综合", "85": "农林牧渔",
+        "11": "农林牧渔",
+        "12": "食品饮料",
+        "13": "纺织服饰",
+        "21": "煤炭",
+        "22": "石油石化",
+        "23": "基础化工",
+        "24": "钢铁",
+        "25": "有色金属",
+        "26": "建筑材料",
+        "27": "机械设备",
+        "28": "汽车",
+        "29": "国防军工",
+        "30": "房地产",
+        "31": "轻工制造",
+        "32": "医药生物",
+        "33": "家用电器",
+        "34": "商贸零售",
+        "35": "社会服务",
+        "36": "银行",
+        "37": "非银金融",
+        "38": "综合",
+        "39": "建筑材料",
+        "41": "公用事业",
+        "42": "交通运输",
+        "43": "房地产",
+        "44": "建筑装饰",
+        "45": "建筑材料",
+        "46": "机械设备",
+        "47": "国防军工",
+        "48": "银行",
+        "49": "非银金融",
+        "51": "电子",
+        "52": "计算机",
+        "53": "传媒",
+        "54": "通信",
+        "61": "综合",
+        "62": "建筑装饰",
+        "63": "机械设备",
+        "64": "电力设备",
+        "65": "计算机",
+        "66": "传媒",
+        "71": "环保",
+        "72": "公用事业",
+        "73": "通信",
+        "74": "传媒",
+        "75": "综合",
+        "85": "农林牧渔",
     }
 
     for sector_code in level3_sectors:
@@ -268,7 +300,7 @@ def fetch_fundamentals_from_spot(
 
     try:
         logger.info("Fetching real-time spot data for all A-shares...")
-        df = ak.stock_zh_a_spot_em()
+        df = ak.stock_zh_a_spot_em()  # type: ignore[attr-defined]
 
         if df is None or df.empty:
             logger.error("No data returned from AKShare")
@@ -672,19 +704,21 @@ def main():
         [data_source],
     ).fetchone()
 
-    print(f"  Stocks with fundamentals: {result[0]}")
-    print(f"  Total records: {result[1]}")
-    print(f"  Latest report date: {result[2]}")
+    print(f"  Stocks with fundamentals: {result[0] if result else 0}")
+    print(f"  Total records: {result[1] if result else 0}")
+    print(f"  Latest report date: {result[2] if result else 'N/A'}")
     print(f"  Records inserted this run: {inserted}")
 
     # Show sector summary if sectors were collected
     if not args.skip_sectors and sector_metrics:
         print()
         print("  Sector Data:")
-        sector_count = conn.execute("SELECT COUNT(*) FROM sectors").fetchone()[0]
-        stocks_with_sector = conn.execute(
+        sector_count_result = conn.execute("SELECT COUNT(*) FROM sectors").fetchone()
+        sector_count = sector_count_result[0] if sector_count_result else 0
+        stocks_with_sector_result = conn.execute(
             "SELECT COUNT(DISTINCT stock_id) FROM stocks WHERE sector IS NOT NULL"
-        ).fetchone()[0]
+        ).fetchone()
+        stocks_with_sector = stocks_with_sector_result[0] if stocks_with_sector_result else 0
         print(f"    Total sectors in database: {sector_count}")
         print(f"    Stocks with sector classification: {stocks_with_sector}")
     print()

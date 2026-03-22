@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from broker.base import Order, OrderSide, Position
 from order.models import OrderErrorType, OrderRequest, OrderValidationError
@@ -30,7 +31,7 @@ class RiskLimit:
 class DailyLossTracker:
     """Track daily losses"""
 
-    date: datetime
+    date: datetime  # Will store the datetime when day starts
     start_balance: float
     current_balance: float
     realized_pnl: float
@@ -86,7 +87,7 @@ class RiskManager:
             balance: Starting account balance
         """
         self.daily_tracker = DailyLossTracker(
-            date=datetime.now().date(),
+            date=datetime.now(),
             start_balance=balance,
             current_balance=balance,
             realized_pnl=0.0,
@@ -118,7 +119,7 @@ class RiskManager:
         current_positions: dict[str, int],
         account_balance: float,
         market_prices: dict[str, float],
-    ) -> OrderValidationError:
+    ) -> OrderValidationError | None:
         """
         Validate order request against risk limits
 
@@ -173,6 +174,11 @@ class RiskManager:
             )
 
         execution_price = order_request.price or price
+        if execution_price is None:
+            return OrderValidationError(
+                error_type=OrderErrorType.INVALID_PRICE,
+                message=f"Execution price is None for {order_request.symbol}",
+            )
         order_value = execution_price * order_request.quantity
 
         if order_value > self.limits.max_order_value:
@@ -282,7 +288,7 @@ class RiskManager:
             return self.daily_tracker.daily_loss >= self.limits.max_daily_loss
         return False
 
-    def get_risk_summary(self) -> dict[str, any]:
+    def get_risk_summary(self) -> dict[str, Any]:
         """
         Get risk summary
 
