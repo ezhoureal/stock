@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Generator
 from datetime import datetime
-from pathlib import Path
-from typing import Generator
 
 import pytest
 
@@ -17,7 +16,7 @@ class TestSentimentStorage:
     """Tests for SentimentStorage class."""
 
     @pytest.fixture
-    def temp_db(self) -> Generator[SentimentStorage, None, None]:
+    def temp_db(self) -> Generator[SentimentStorage]:
         """Create a temporary database for testing."""
 
         # Create a temporary file path but don't create the file

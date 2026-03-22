@@ -4,7 +4,7 @@ Sentiment data collection module for Chinese A-share stocks using AKShare APIs.
 
 ## Overview
 
-This module collects market sentiment indicators by deriving them from market behavior proxies, since direct sentiment APIs (舆情) are not available for Chinese A-shares. The sentiment data feeds the `sentiment_strategy` module for trading decisions.
+This module collects market sentiment indicators by deriving them from market behavior proxies, since direct sentiment APIs are not available for Chinese A-shares. The sentiment data feeds the `sentiment_strategy` module for trading decisions.
 
 ## Architecture
 
@@ -181,34 +181,6 @@ This module uses batch-friendly AKShare APIs that return all stocks at once:
 | `stock_margin_detail_sse` | SSE margin trading details | Daily |
 | `stock_margin_detail_szse` | SZSE margin trading details | Daily |
 
-> **Note**: Use the `/akshare` skill to search for AKShare API documentation:
-> ```
-> User: What's the AKShare function for dragon-tiger list?
-> Assistant: /akshare 龙虎榜
-> ```
-
-## Testing
-
-Run the test suite:
-
-```bash
-# Run all data module tests
-uv run pytest tests/data/ -v
-
-# Run specific test file
-uv run pytest tests/data/test_providers.py -v
-
-# Run with coverage
-uv run pytest tests/data/ --cov=data --cov-report=html
-```
-
-### Test Coverage
-
-- `test_storage.py`: DuckDB CRUD operations (11 tests)
-- `test_providers.py`: Sentiment calculation logic (9 tests)
-- `test_collector.py`: Orchestration and aggregation (10 tests)
-
-All tests pass: **32/32 ✅**
 
 ## Integration with Trading System
 
@@ -228,23 +200,3 @@ strategy.set_data_provider(storage)
 # Generate signals using sentiment
 signals = strategy.generate(["600519", "000001"])
 ```
-
-## Notes
-
-### Network Limitations
-
-AKShare APIs may be rate-limited or blocked depending on your network. If you encounter connection errors:
-1. Try again later (rate limits reset daily)
-2. Use a VPN if accessing from outside China
-3. The module implements retry logic with `max_retries` config
-
-### Data Quality
-
-Sentiment scores are derived from market behavior proxies, not direct sentiment measures (news analysis, social media scraping). The accuracy depends on:
-- Market efficiency (how quickly prices reflect sentiment)
-- Liquidity (more traded stocks have better signals)
-- Trading volume (higher volume = more reliable signals)
-
-## License
-
-Part of the Chinese Stock Trading System. See main project LICENSE.

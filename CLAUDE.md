@@ -17,41 +17,6 @@ curl -LsSf https://docs.astral.sh/uv | sh
 uv sync
 ```
 
-**Broker/Live Trading (run from broker/python/):**
-```bash
-cd broker/python
-uv run python test_simple.py           # Mock broker test
-uv run python main.py --paper-trading  # Paper trading mode
-```
-
-**Examples:**
-```bash
-uv run python examples/run_trading_system.py      # Full system demo
-uv run python examples/test_system_mock.py        # Mock system test
-uv run python examples/test_broker_integration.py # Broker integration test
-```
-
-### Development
-
-```bash
-# Run all tests (ignore GPU-dependent tests on machines without CUDA)
-uv run pytest --ignore=high_freq_sentiment
-
-# Run specific test file
-uv run pytest broker/python/test_simple.py
-
-# Run specific test function
-uv run pytest examples/test_system_mock.py::test_trading_system_mock -v
-
-# Lint and format code (REQUIRED before commits)
-uv run ruff check .           # Check for issues
-uv run ruff check --fix .     # Auto-fix issues
-uv run ruff format .          # Format code
-
-# Type checking (REQUIRED before commits)
-uv run pyright .              # Check for type errors
-```
-
 ## Architecture
 
 ## Key Architectural Patterns

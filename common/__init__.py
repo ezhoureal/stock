@@ -16,8 +16,6 @@ Usage:
     print(result.summary())
 """
 
-from backtest.engine import BacktestEngineImpl, run_backtest
-
 from .config import (
     BacktestConfig,
     ContrarianConfig,
@@ -101,7 +99,4 @@ __all__ = [
     "TradingSystem",
     "create_system",
     "quick_backtest",
-    # Backtest (moved to backtest module)
-    "BacktestEngineImpl",
-    "run_backtest",
 ]

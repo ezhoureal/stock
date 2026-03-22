@@ -14,8 +14,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from backtest.engine import BacktestEngineImpl
-
 from .config import SystemConfig
 from .interfaces import (
     BacktestResult,
@@ -210,6 +208,9 @@ class TradingSystem:
         # Run backtest
         if self._data_provider is None:
             raise RuntimeError("Data provider not initialized")
+        # Lazy import to avoid circular dependency
+        from backtest.engine import BacktestEngineImpl
+
         engine = BacktestEngineImpl(self._data_provider, self.config.backtest)
         result = engine.run(
             strategy,
