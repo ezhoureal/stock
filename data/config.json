@@ -1,21 +1,50 @@
 {
   "database": {
-    "path": "data/stocks.duckdb",
-    "export_dir": "data/exports"
+    "path": "data/sentiment.db",
+    "batch_size": 1000
   },
-  "data_collection": {
-    "primary_source": "akshare",
-    "secondary_source": "baostock",
-    "historical_years": 1,
-    "csi300_index": "000300"
+  "collection": {
+    "daily_batch_enabled": true,
+    "trading_days_only": true,
+    "max_retries": 3,
+    "retry_delay_seconds": 2
   },
-  "logging": {
-    "log_dir": "data/logs",
-    "log_level": "INFO"
+  "rate_limits": {
+    "requests_per_second": 10,
+    "batch_cooldown_seconds": 1
   },
   "sentiment": {
-    "enabled": false,
-    "news_sources": ["sina", "eastmoney"],
-    "update_frequency": "daily"
+    "weights": {
+      "news": 0.40,
+      "social": 0.35,
+      "search": 0.15,
+      "forum": 0.10
+    },
+    "sources": {
+      "social": {
+        "enabled": true,
+        "api": "stock_hot_rank_em",
+        "min_confidence": 0.3
+      },
+      "news": {
+        "enabled": true,
+        "api": ["stock_lhb_stock_statistic_em", "stock_hsgt_hold_stock_em"],
+        "min_confidence": 0.4
+      },
+      "forum": {
+        "enabled": true,
+        "api": ["stock_market_fund_flow", "stock_margin_detail_sse", "stock_margin_detail_szse"],
+        "min_confidence": 0.5
+      },
+      "search": {
+        "enabled": true,
+        "api": ["stock_zh_a_spot_em", "stock_margin_detail_sse", "stock_margin_detail_szse"],
+        "min_confidence": 0.4
+      }
+    }
+  },
+  "storage": {
+    "retention_days": 365,
+    "compress_raw_data": true
   }
 }

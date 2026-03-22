@@ -17,7 +17,6 @@ Usage:
 """
 
 from backtest.engine import BacktestEngineImpl, run_backtest
-from data.providers.duckdb_provider import DuckDBDataProvider
 
 from .config import (
     BacktestConfig,
@@ -105,6 +104,4 @@ __all__ = [
     # Backtest (moved to backtest module)
     "BacktestEngineImpl",
     "run_backtest",
-    # Data Provider (moved to data.providers module)
-    "DuckDBDataProvider",
 ]

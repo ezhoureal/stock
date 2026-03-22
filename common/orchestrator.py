@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from backtest.engine import BacktestEngineImpl
-from data.providers.duckdb_provider import DuckDBDataProvider
 
 from .config import SystemConfig
 from .interfaces import (
@@ -90,6 +89,8 @@ class TradingSystem:
         logger.info("Initializing trading system...")
 
         # Initialize data provider
+        from data.duckdb_provider import DuckDBDataProvider
+
         self._data_provider = DuckDBDataProvider(self.config.data)
         logger.info("Data provider initialized")
 

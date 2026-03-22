@@ -21,7 +21,7 @@ from common import (
     create_system,
     quick_backtest,
 )
-from data.providers import DuckDBDataProvider
+from data.duckdb_provider import DuckDBDataProvider
 
 
 def example_signal_generation():
