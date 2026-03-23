@@ -100,6 +100,15 @@ class SentimentStorage(DataProvider):
             ON sentiment_composite(symbol, timestamp DESC)
         """)
 
+        # Stock name cache table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS stock_names (
+                symbol VARCHAR PRIMARY KEY,
+                name VARCHAR NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         logger.info(f"Database initialized at {self.db_path}")
 
     def store_raw_scores(self, scores: list[SentimentScore]) -> int:
@@ -419,6 +428,75 @@ class SentimentStorage(DataProvider):
         except Exception as e:
             logger.error(f"Error cleaning up old data: {e}")
             return 0
+
+    def get_stock_names(self, symbols: list[str]) -> dict[str, str]:
+        """
+        Get cached stock names for symbols.
+
+        Args:
+            symbols: List of stock symbols
+
+        Returns:
+            Dictionary mapping symbol to name (only cached symbols)
+        """
+        if not symbols:
+            return {}
+
+        conn = self._get_connection()
+
+        placeholders = ",".join("?" * len(symbols))
+        result = conn.execute(
+            f"SELECT symbol, name FROM stock_names WHERE symbol IN ({placeholders})",
+            symbols,
+        ).fetchall()
+
+        return {row[0]: row[1] for row in result}
+
+    def update_stock_names(self, names: dict[str, str]) -> int:
+        """
+        Update stock name cache.
+
+        Args:
+            names: Dictionary mapping symbol to name
+
+        Returns:
+            Number of names updated/inserted
+        """
+        if not names:
+            return 0
+
+        conn = self._get_connection()
+
+        updated = 0
+        for symbol, name in names.items():
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO stock_names (symbol, name, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT (symbol) DO UPDATE SET
+                        name = excluded.name,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (symbol, name),
+                )
+                updated += 1
+            except Exception as e:
+                logger.debug(f"Error updating name for {symbol}: {e}")
+
+        logger.info(f"Updated {updated} stock names in cache")
+        return updated
+
+    def get_all_stock_names(self) -> dict[str, str]:
+        """
+        Get all cached stock names.
+
+        Returns:
+            Dictionary mapping symbol to name
+        """
+        conn = self._get_connection()
+        result = conn.execute("SELECT symbol, name FROM stock_names").fetchall()
+        return {row[0]: row[1] for row in result}
 
     def close(self) -> None:
         """Close database connection."""

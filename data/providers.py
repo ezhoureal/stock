@@ -48,6 +48,10 @@ class SentimentDataProvider:
         Uses stock_hot_rank_em which provides popularity ranking.
         High popularity + price movement = social sentiment.
 
+        Note: stock_hot_rank_em returns codes with market prefix (e.g., "SZ002261"),
+        while stock_zh_a_spot_em returns codes without prefix (e.g., "002261").
+        We normalize by stripping the market prefix for matching.
+
         Sentiment formula:
         - Top 10% popular with price drop < -2%: -0.6 (panic selling)
         - Top 10% popular with price rise > 2%: 0.6 (FOMO buying)
@@ -72,6 +76,8 @@ class SentimentDataProvider:
         total_stocks = len(hot_rank_df)
         spot_dict: dict[str, dict[str, float]] = {}
 
+        # Build spot data lookup using code without market prefix
+        # stock_zh_a_spot_em returns codes like "002261" (no prefix)
         if not spot_df.empty and "代码" in spot_df.columns:
             for _, row in spot_df.iterrows():
                 symbol = str(row["代码"])
@@ -90,15 +96,23 @@ class SentimentDataProvider:
 
         for i, (_, row) in enumerate(hot_rank_df.iterrows()):
             try:
-                # Extract symbol - AKShare may use different column names
-                symbol = str(row.get("代码", row.get("股票代码", "")))
-                if not symbol or symbol == "nan":
+                # stock_hot_rank_em returns "代码" column with market prefix
+                # e.g., "SZ002261", "SH603000"
+                raw_symbol = str(row.get("代码", ""))
+                if not raw_symbol or raw_symbol == "nan":
                     continue
+
+                # Strip market prefix (SH/SZ/BJ) for lookup in spot_dict
+                # Keep original symbol with prefix for the result
+                symbol = raw_symbol
+                lookup_symbol = raw_symbol
+                if len(raw_symbol) > 2 and raw_symbol[:2] in ("SH", "SZ", "BJ"):
+                    lookup_symbol = raw_symbol[2:]
 
                 rank_percentile = 1 - (i / total_stocks) if total_stocks > 0 else 0
 
-                # Get price change from spot data
-                spot_data = spot_dict.get(symbol, {})
+                # Get price change from spot data using stripped symbol
+                spot_data = spot_dict.get(lookup_symbol, {})
                 price_change_pct = spot_data.get("price_change_pct", 0)
 
                 # Apply sentiment formula
@@ -163,6 +177,7 @@ class SentimentDataProvider:
         timestamp = datetime.now()
 
         # Process dragon-tiger data
+        # API returns column '龙虎榜净买额' (dragon-tiger net buy amount)
         dt_data: dict[str, dict[str, float]] = {}
         if not dt_list_df.empty:
             for _, row in dt_list_df.iterrows():
@@ -170,7 +185,7 @@ class SentimentDataProvider:
                 if not symbol or symbol == "nan":
                     continue
 
-                net_buy = row.get("净买入", 0)
+                net_buy = row.get("龙虎榜净买额", 0)
                 if isinstance(net_buy, str):
                     try:
                         net_buy = float(net_buy.replace(",", ""))
@@ -184,6 +199,7 @@ class SentimentDataProvider:
                 dt_data[symbol] = {"dt_net_ratio": dt_net_ratio, "has_dt": True}
 
         # Process northbound data
+        # API returns column '5日增持估计-占流通股比' (5-day estimated holding change as % of float)
         hsgt_data: dict[str, float] = {}
         if not hsgt_df.empty:
             for _, row in hsgt_df.iterrows():
@@ -191,7 +207,8 @@ class SentimentDataProvider:
                 if not symbol or symbol == "nan":
                     continue
 
-                holding_change = row.get("持股变动", 0)
+                # Try multiple possible column names for holding change
+                holding_change = row.get("5日增持估计-占流通股比", row.get("持股变动", 0))
                 if isinstance(holding_change, str):
                     try:
                         holding_change = float(holding_change.replace("%", ""))
@@ -300,7 +317,8 @@ class SentimentDataProvider:
         margin_data: dict[str, float] = {}
         if not margin_df.empty and "融资余额" in margin_df.columns:
             for _, row in margin_df.iterrows():
-                symbol = str(row.get("代码", row.get("股票代码", "")))
+                # Handle different column names: SSE uses 标的证券代码, SZSE uses 证券代码
+                symbol = str(row.get("标的证券代码", row.get("证券代码", row.get("代码", ""))))
                 if not symbol or symbol == "nan":
                     continue
 
@@ -360,8 +378,9 @@ class SentimentDataProvider:
         Derive search sentiment from margin and volume data.
 
         Uses:
-        - stock_margin_detail_*: Margin trading balance changes
-        - stock_zh_a_spot_em: Trading volume
+        - stock_margin_detail_sse: SSE margin trading (columns: 标的证券代码, 融资余额)
+        - stock_margin_detail_szse: SZSE margin trading (columns: 证券代码, 融资余额)
+        - stock_zh_a_spot_em: Trading volume (columns: 代码, 成交量)
 
         Sentiment formula:
         sentiment = 0.6 * margin_change + 0.4 * (volume_ratio - 1)
@@ -369,7 +388,7 @@ class SentimentDataProvider:
         where volume_ratio = current_volume / avg_volume
 
         Args:
-            margin_df: DataFrame from stock_margin_detail_sse or szse
+            margin_df: Combined DataFrame from stock_margin_detail_sse and szse
             spot_df: DataFrame from stock_zh_a_spot_em
 
         Returns:
@@ -379,10 +398,12 @@ class SentimentDataProvider:
         timestamp = datetime.now()
 
         # Process margin data
+        # SSE uses '标的证券代码', SZSE uses '证券代码'
         margin_data: dict[str, float] = {}
         if not margin_df.empty and "融资余额" in margin_df.columns:
             for _, row in margin_df.iterrows():
-                symbol = str(row.get("代码", row.get("股票代码", "")))
+                # Try different column names for symbol (SSE vs SZSE)
+                symbol = str(row.get("标的证券代码", row.get("证券代码", row.get("代码", ""))))
                 if not symbol or symbol == "nan":
                     continue
 
@@ -402,7 +423,7 @@ class SentimentDataProvider:
 
         # Process spot data for volume
         spot_data: dict[str, dict[str, float]] = {}
-        if not spot_df.empty:
+        if not spot_df.empty and "成交量" in spot_df.columns:
             for _, row in spot_df.iterrows():
                 symbol = str(row.get("代码", ""))
                 if not symbol or symbol == "nan":
