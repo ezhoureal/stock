@@ -265,22 +265,20 @@ class VerdictCalculator:
         return sell_verdicts[:limit]
 
 
-def fetch_stock_names_from_api(symbols: list[str]) -> dict[str, str]:
-    """Fetch stock names from AKShare API."""
+def fetch_all_stock_names_from_api():
+    """Fetch all stock names from AKShare API as DataFrame."""
     try:
         import akshare as ak
 
-        df = ak.stock_zh_a_spot_em()
-        name_map: dict[str, str] = {}
-        for _, row in df.iterrows():
-            symbol = str(row.get("代码", ""))
-            name = str(row.get("名称", ""))
-            if symbol in symbols and name:
-                name_map[symbol] = name
-        return name_map
+        df = ak.stock_info_a_code_name()
+        # Rename columns to match database schema
+        df = df.rename(columns={"code": "symbol", "name": "name"})
+        # Filter out rows with empty values
+        df = df[df["symbol"].notna() & df["name"].notna()]
+        return df
     except Exception as e:
         logger.warning(f"Failed to fetch stock names from API: {e}")
-        return {}
+        return None
 
 
 def format_source_scores(source_scores: dict[str, float]) -> str:
@@ -313,14 +311,15 @@ def get_stock_names_with_cache(symbols: list[str], storage: SentimentStorage) ->
     missing_symbols = [s for s in symbols if s not in cached_names]
 
     if missing_symbols:
-        print(f"Fetching {len(missing_symbols)} missing names from API...")
-        api_names = fetch_stock_names_from_api(missing_symbols)
+        print("Fetching all stock names from API...")
+        df = fetch_all_stock_names_from_api()
 
-        if api_names:
-            # Update cache with new names
-            storage.update_stock_names(api_names)
-            cached_names.update(api_names)
-            print(f"Updated cache with {len(api_names)} new names")
+        if df is not None:
+            # Cache ALL names for future use (DuckDB reads DataFrame directly)
+            count = storage.update_stock_names_from_df(df)
+            print(f"Updated cache with {count} total names")
+            # Get the names we need from cache
+            cached_names = storage.get_stock_names(symbols)
 
     return cached_names
 
