@@ -1,110 +1,129 @@
 # Data Collection Module
 
-Sentiment data collection module for Chinese A-share stocks using AKShare APIs.
+Data collection and analysis module for Chinese A-share stocks using AKShare APIs.
 
 ## Overview
 
-This module collects market sentiment indicators by deriving them from market behavior proxies, since direct sentiment APIs are not available for Chinese A-shares. The sentiment data feeds the `sentiment_strategy` module for trading decisions.
+This module provides:
+1. **Sentiment data collection** - Derives market sentiment from behavior proxies
+2. **Verdict analysis** - Combines sentiment + valuation for trading signals
+3. **DuckDB storage** - Persists sentiment data for strategy consumption
 
 ## Architecture
 
 ```
 data/
 ├── __init__.py              # Module exports (lazy imports)
-├── config.json              # Configuration (weights, rate limits, etc.)
-├── sentiment_collector.py   # Main orchestrator
-├── providers.py              # 4 sentiment source providers
-├── storage.py                # DuckDB persistence layer
-└── API/                      # AKShare API documentation
+├── config.json              # Configuration (weights, rate limits)
+├── sentiment_collector.py   # Sentiment collection orchestrator
+├── providers.py             # Sentiment data providers (4 sources)
+├── storage.py               # DuckDB persistence layer
+└── verdict.py               # Sentiment + Valuation analysis
 ```
 
-## Sentiment Sources
+## Module Exports
 
-The system aggregates sentiment from 4 sources, each with configurable weights:
+```python
+from data import SentimentCollector, SentimentStorage, SentimentDataProvider, VerdictCalculator
+```
 
-| Source | Weight | AKShare APIs | Derivation Formula |
-|--------|--------|--------------|-------------------|
+---
+
+## Sentiment Collection
+
+Collects market sentiment by deriving it from behavior proxies (direct sentiment APIs unavailable for A-shares).
+
+### Sentiment Sources
+
+| Source | Weight | AKShare APIs | Derivation |
+|--------|--------|--------------|------------|
 | **social** | 35% | `stock_hot_rank_em` | Popularity rank + price movement |
-| **news** | 40% | `stock_lhb_stock_statistic_em` + `stock_hsgt_hold_stock_em` | Dragon-tiger net buy + Northbound holdings |
-| **forum** | 10% | `stock_market_fund_flow` + `stock_margin_detail_*` | Main force flow + Margin balance |
-| **search** | 15% | `stock_margin_detail_*` + `stock_zh_a_spot_em` | Margin change + Trading volume |
+| **news** | 40% | `stock_lhb_stock_statistic_em` + `stock_hsgt_hold_stock_em` | Dragon-tiger + Northbound holdings |
+| **forum** | 10% | `stock_market_fund_flow` + `stock_margin_detail_*` | Main force flow + Margin |
+| **search** | 15% | `stock_margin_detail_*` + `stock_zh_a_spot_em` | Margin + Volume |
 
-### Social Sentiment (35%)
-Derived from `stock_hot_rank_em` which shows the top 100 stocks by popularity ranking:
-- **Top 10% popular + price drop < -2%**: -0.6 (panic selling)
-- **Top 10% popular + price rise > 2%**: +0.6 (FOMO buying)
-- **Top 10% popular + moderate change**: +0.3 (curiosity)
-- **Others**: `rank_percentile × 0.2`
-
-### News Sentiment (40%)
-Derived from dragon-tiger list and Northbound holdings:
-```
-sentiment = 0.6 × dragon_tiger_ratio + 0.4 × northbound_change
-```
-
-### Forum Sentiment (10%)
-Derived from fund flow and margin trading:
-```
-sentiment = 0.6 × main_force_ratio + 0.4 × margin_change
-```
-
-### Search Sentiment (15%)
-Derived from margin balance and volume:
-```
-sentiment = 0.6 × margin_change + 0.4 × (volume_ratio - 1)
-```
-
-## Usage
-
-### Command Line
+### Usage
 
 ```bash
-# Run daily collection for all stocks
+# Run daily collection
 uv run python -m data.sentiment_collector
 
-# Query latest sentiment for specific stocks
+# Query specific stocks
 uv run python -m data.sentiment_collector --symbols 600519,000001
-
-# Verbose mode
-uv run python -m data.sentiment_collector --verbose
 ```
-
-### Python API
 
 ```python
 from data import SentimentCollector, SentimentStorage
 
-# Create collector
 collector = SentimentCollector()
-
-# Run daily collection
 counts = collector.run_collection()
 print(f"Stored {counts['raw']} raw and {counts['composite']} composite scores")
 
 # Get latest sentiment
 latest = collector.get_latest_sentiment(["600519", "000001"])
-for symbol, score in latest.items():
-    print(f"{symbol}: {score.score:+.3f} (confidence: {score.confidence:.2f})")
-
-# Get historical sentiment
-from datetime import datetime, timedelta
-end = datetime.now()
-start = end - timedelta(days=30)
-history = collector.get_sentiment_history(["600519"], start, end, source="news")
 ```
 
-### Storage API
+---
+
+## Verdict Analysis
+
+Combines sentiment scores with valuation metrics to generate trading signals using contrarian logic:
+- **BUY**: Bearish sentiment + Undervalued fundamentals
+- **SELL**: Bullish sentiment + Overvalued fundamentals
+
+### Usage
+
+```bash
+# Bottom 10 (contrarian buy candidates - bearish + undervalued)
+uv run python data/verdict.py --bottom-n 10
+
+# Top 10 (potential sell candidates - bullish + overvalued)
+uv run python data/verdict.py --top-n 10
+
+# Custom output format
+uv run python data/verdict.py --bottom-n 20 --output csv
+
+# Adjust sentiment weight
+uv run python data/verdict.py --bottom-n 10 --weight-sentiment 0.6
+```
+
+### Output
+
+```
+----------------------------------------------------------------------------------------------------
+ Rank | Symbol   | Name       | Sentiment | V Score  | Combined | Verdict |       PE |     PB |   Div%
+----------------------------------------------------------------------------------------------------
+    1 | 600519   | 贵州茅台    |     -2.15 |    0.250 |     72.5 | BUY     |    25.3 |   8.12 |   1.62
+    2 | 000858   | 五粮液      |     -1.89 |    0.180 |     68.3 | BUY     |    18.5 |   4.25 |   2.10
+```
+
+### Python API
+
+```python
+from data import VerdictCalculator
+
+calculator = VerdictCalculator(weight_sentiment=0.5)
+
+# Get bottom N (bearish) stocks
+stocks = calculator.get_bottom_n_sentiment(10)
+results = calculator.analyze_stocks(stocks, is_bottom_n=True)
+
+for r in results:
+    print(f"{r.symbol}: sentiment={r.sentiment_score:.2f}, V={r.valuation_score:.3f}, verdict={r.verdict.value}")
+
+calculator.close()
+```
+
+---
+
+## Storage API
 
 ```python
 from data.storage import SentimentStorage
 
-# Open database
 storage = SentimentStorage("data/sentiment.db")
 
-# Store raw scores
-storage.store_raw_scores(sentiment_scores)
-
-# Store composite scores
+# Store composite score
 storage.store_composite_score(
     symbol="600519",
     timestamp=datetime.now(),
@@ -113,36 +132,48 @@ storage.store_composite_score(
     source_scores={"news": 0.6, "social": 0.4}
 )
 
-# Query data
+# Query latest scores
 latest = storage.get_latest_composite(["600519"])
-history = storage.get_sentiment(["600519"], start, end, source="news")
+
+# Get stock names (cached)
+names = storage.get_stock_names(["600519", "000001"])
 ```
+
+---
 
 ## Database Schema
 
 ### sentiment_raw
 Raw sentiment scores by source:
-- `id`: Auto-increment primary key
-- `symbol`: Stock code (e.g., "600519")
-- `timestamp`: Collection time
-- `source`: "news", "social", "search", or "forum"
-- `score`: Sentiment score (-1 to 1)
-- `confidence`: Confidence level (0 to 1)
-- `raw_data`: JSON with metadata
-- `created_at`: Record creation time
+- `symbol`, `timestamp`, `source`, `score`, `confidence`, `raw_data`
 
 ### sentiment_composite
 Aggregated composite scores:
-- `id`: Auto-increment primary key
-- `symbol`: Stock code
-- `timestamp`: Collection time
-- `score`: Weighted composite score
-- `confidence`: Average confidence
-- `source_scores`: JSON with individual source scores
+- `symbol`, `timestamp`, `score`, `confidence`, `source_scores`
+
+### stock_names
+Stock name cache:
+- `symbol`, `name`, `updated_at`
+
+---
+
+## AKShare APIs Used
+
+| API | Description | Use Case |
+|-----|-------------|----------|
+| `stock_zh_a_spot_em` | All A-share real-time quotes | PE, PB, price data |
+| `stock_hot_rank_em` | Top 100 popularity ranking | Social sentiment |
+| `stock_market_fund_flow` | Market-wide fund flow | Forum sentiment |
+| `stock_hsgt_hold_stock_em` | Northbound holdings | News sentiment |
+| `stock_lhb_stock_statistic_em` | Dragon-tiger statistics | News sentiment |
+| `stock_margin_detail_sse/szse` | Margin trading | Forum/Search sentiment |
+| `stock_history_dividend` | Dividend history | Dividend yield |
+
+---
 
 ## Configuration
 
-Edit `data/config.json` to customize:
+Edit `data/config.json`:
 
 ```json
 {
@@ -153,8 +184,7 @@ Edit `data/config.json` to customize:
   "collection": {
     "daily_batch_enabled": true,
     "trading_days_only": true,
-    "max_retries": 3,
-    "retry_delay_seconds": 2
+    "max_retries": 3
   },
   "sentiment": {
     "weights": {
@@ -165,38 +195,4 @@ Edit `data/config.json` to customize:
     }
   }
 }
-```
-
-## AKShare API Queries
-
-This module uses batch-friendly AKShare APIs that return all stocks at once:
-
-| API | Description | Frequency |
-|-----|-------------|-----------|
-| `stock_zh_a_spot_em` | All A-share real-time quotes (~5000 stocks) | Daily |
-| `stock_hot_rank_em` | Top 100 popularity ranking | Daily |
-| `stock_market_fund_flow` | Market-wide fund flow | Daily |
-| `stock_hsgt_hold_stock_em` | Northbound holdings ranking | Daily |
-| `stock_lhb_stock_statistic_em` | Dragon-tiger statistics | Daily |
-| `stock_margin_detail_sse` | SSE margin trading details | Daily |
-| `stock_margin_detail_szse` | SZSE margin trading details | Daily |
-
-
-## Integration with Trading System
-
-The sentiment data integrates with the `sentiment_strategy` module:
-
-```python
-from sentiment_strategy import SentimentStrategy
-from data.storage import SentimentStorage
-
-# Get sentiment data provider
-storage = SentimentStorage("data/sentiment.db")
-
-# Create strategy with sentiment data
-strategy = SentimentStrategy(config)
-strategy.set_data_provider(storage)
-
-# Generate signals using sentiment
-signals = strategy.generate(["600519", "000001"])
 ```
