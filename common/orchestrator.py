@@ -78,19 +78,22 @@ class TradingSystem:
 
         self._initialized = False
 
-    def initialize(self) -> None:
+    def initialize(self, data_provider: DataProvider | None = None) -> None:
         """
         Initialize all system components.
 
         This method must be called before running the system.
+
+        Args:
+            data_provider: Optional DataProvider instance. If None, one must be
+                set via set_data_provider() before running.
         """
         logger.info("Initializing trading system...")
 
-        # Initialize data provider
-        from data.duckdb_provider import DuckDBDataProvider
-
-        self._data_provider = DuckDBDataProvider(self.config.data)
-        logger.info("Data provider initialized")
+        # Initialize data provider if provided
+        if data_provider is not None:
+            self._data_provider = data_provider
+            logger.info("Data provider initialized")
 
         # Initialize strategies
         self._strategies = create_strategy_adapters(
@@ -343,6 +346,16 @@ class TradingSystem:
                 raise RuntimeError("Signal router not initialized")
             self._router.remove_strategy(strategy_name)
             logger.info(f"Removed strategy: {strategy_name}")
+
+    def set_data_provider(self, data_provider: DataProvider) -> None:
+        """
+        Set or replace the data provider.
+
+        Args:
+            data_provider: DataProvider instance to use
+        """
+        self._data_provider = data_provider
+        logger.info("Data provider set")
 
     def shutdown(self) -> None:
         """Shutdown the system gracefully"""

@@ -15,8 +15,6 @@ import pandas as pd
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from data.duckdb_provider import DuckDBDataProvider
-
 from common import (
     BacktestConfig,
     TradingSystem,
@@ -204,28 +202,29 @@ def example_custom_strategy():
 
 def example_data_provider():
     """Example: Using the data provider directly"""
+    # This example requires a DataProvider implementation.
+    # Create your own provider by implementing the DataProvider interface,
+    # or use one of the existing providers from the data module.
     print("\n" + "=" * 60)
     print("Example 5: Data Provider")
     print("=" * 60)
-
-    from common import DataConfig
-
-    config = DataConfig(db_path="data/stocks.duckdb")
-    provider = DuckDBDataProvider(config)
-
-    # Get universe
-    universe = provider.get_universe("csi300")
-    print(f"\nCSI 300 universe: {len(universe)} stocks")
-
-    if universe:
-        # Get latest prices
-        sample_symbols = universe[:5]
-        prices = provider.get_latest_prices(sample_symbols)
-        print("\nLatest prices for sample stocks:")
-        for symbol, price in prices.items():
-            print(f"  {symbol}: ¥{price:.2f}")
-
-    provider.close()
+    print("\nTo use a data provider, implement the DataProvider interface")
+    print("and set it on the trading system using system.set_data_provider().")
+    print("\nAvailable providers from the data module:")
+    print("  - SentimentStorage: Sentiment data from DuckDB")
+    print("  - ValuationDataProvider: Valuation metrics from AKShare")
+    # Uncomment when you have a DataProvider implementation:
+    #
+    # from common import DataProvider
+    # from my_provider import MyDataProvider
+    #
+    # provider = MyDataProvider()
+    # system = create_system()
+    # system.set_data_provider(provider)
+    #
+    # # Get universe
+    # universe = provider.get_universe("csi300")
+    # print(f"\nCSI 300 universe: {len(universe)} stocks")
 
 
 def main():
