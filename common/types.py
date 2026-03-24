@@ -207,6 +207,65 @@ class SentimentScore:
 
 
 @dataclass
+class VerdictScore:
+    """
+    Combined sentiment + valuation verdict for a stock.
+
+    Uses contrarian strategy logic:
+    - BUY: Bearish sentiment + Undervalued fundamentals
+    - SELL: Bullish sentiment + Overvalued fundamentals
+    - HOLD: Mixed or neutral signals
+    """
+
+    symbol: str
+    timestamp: datetime
+    verdict: SignalType  # BUY, SELL, or HOLD
+    score: float  # -1 to +1 (negative = sell signal, positive = buy signal)
+    confidence: float  # 0 to 1 (higher when sentiment and valuation agree)
+    sentiment_score: float  # Raw sentiment score (-1 to 1)
+    valuation_score: float  # Raw valuation score (typically -0.5 to 0.5)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def is_buy_signal(self) -> bool:
+        """Check if verdict is a buy signal"""
+        return self.verdict in [SignalType.BUY]
+
+    @property
+    def is_sell_signal(self) -> bool:
+        """Check if verdict is a sell signal"""
+        return self.verdict in [SignalType.SELL]
+
+    @property
+    def is_hold(self) -> bool:
+        """Check if verdict is hold"""
+        return self.verdict == SignalType.HOLD
+
+    @property
+    def signal_strength(self) -> str:
+        """Human-readable signal strength"""
+        abs_score = abs(self.score)
+        if abs_score >= 0.7:
+            return "STRONG"
+        elif abs_score >= 0.4:
+            return "MODERATE"
+        return "WEAK"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            "symbol": self.symbol,
+            "timestamp": self.timestamp.isoformat(),
+            "verdict": self.verdict.value,
+            "score": self.score,
+            "confidence": self.confidence,
+            "sentiment_score": self.sentiment_score,
+            "valuation_score": self.valuation_score,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
 class TradingSignal:
     """
     Unified trading signal used across all strategy modules.

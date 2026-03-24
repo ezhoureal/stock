@@ -15,13 +15,14 @@ import pandas as pd
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from data.duckdb_provider import DuckDBDataProvider
+
 from common import (
     BacktestConfig,
     TradingSystem,
     create_system,
     quick_backtest,
 )
-from data.duckdb_provider import DuckDBDataProvider
 
 
 def example_signal_generation():

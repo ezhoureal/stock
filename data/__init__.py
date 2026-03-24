@@ -10,9 +10,10 @@ the common module. Import classes directly from their submodules:
 - from data.sentiment_collector import SentimentCollector
 - from data.storage import SentimentStorage
 - from data.providers import ValuationDataProvider
+- from data.verdict import VerdictCalculator
 """
 
-__all__ = ["SentimentCollector", "SentimentStorage", "ValuationDataProvider"]
+__all__ = ["SentimentCollector", "SentimentStorage", "ValuationDataProvider", "VerdictCalculator"]
 
 
 def __getattr__(name: str):
@@ -29,4 +30,8 @@ def __getattr__(name: str):
         from data.providers import ValuationDataProvider
 
         return ValuationDataProvider
+    if name == "VerdictCalculator":
+        from data.verdict import VerdictCalculator
+
+        return VerdictCalculator
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
