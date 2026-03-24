@@ -152,7 +152,7 @@ class SentimentStorage(DataProvider):
                 )
                 stored += 1
             except Exception as e:
-                logger.debug(f"Error storing score for {score.symbol}: {e}")
+                logger.warning(f"Error storing score for {score.symbol}: {e}")
 
         logger.info(f"Stored {stored}/{len(scores)} raw sentiment scores")
         return stored
@@ -328,7 +328,7 @@ class SentimentStorage(DataProvider):
                         metadata=raw_data.get("metadata", {}),
                     )
             except Exception as e:
-                logger.debug(f"Error retrieving latest sentiment for {symbol}: {e}")
+                logger.warning(f"Error retrieving latest sentiment for {symbol}: {e}")
 
         return result_dict
 
@@ -400,7 +400,7 @@ class SentimentStorage(DataProvider):
                         metadata={"source_scores": source_scores},
                     )
             except Exception as e:
-                logger.debug(f"Error retrieving latest composite for {symbol}: {e}")
+                logger.warning(f"Error retrieving latest composite for {symbol}: {e}")
 
         return result_dict
 
@@ -452,6 +452,39 @@ class SentimentStorage(DataProvider):
 
         return {row[0]: row[1] for row in result}
 
+    def update_stock_names_from_df(self, df) -> int:
+        """
+        Update stock name cache from a DataFrame.
+
+        Args:
+            df: DataFrame with 'symbol' and 'name' columns
+
+        Returns:
+            Number of names updated/inserted
+        """
+        if df is None or df.empty:
+            return 0
+
+        conn = self._get_connection()
+
+        try:
+            # DuckDB can query DataFrames directly
+            conn.execute(
+                """
+                INSERT INTO stock_names (symbol, name)
+                SELECT symbol, name FROM df
+                ON CONFLICT (symbol) DO UPDATE SET
+                    name = excluded.name,
+                    updated_at = NOW()
+                """
+            )
+            count = len(df)
+            logger.info(f"Updated {count} stock names in cache")
+            return count
+        except Exception as e:
+            logger.warning(f"Error updating stock names: {e}")
+            return 0
+
     def update_stock_names(self, names: dict[str, str]) -> int:
         """
         Update stock name cache.
@@ -467,25 +500,23 @@ class SentimentStorage(DataProvider):
 
         conn = self._get_connection()
 
-        updated = 0
-        for symbol, name in names.items():
-            try:
-                conn.execute(
-                    """
-                    INSERT INTO stock_names (symbol, name, updated_at)
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
-                    ON CONFLICT (symbol) DO UPDATE SET
-                        name = excluded.name,
-                        updated_at = CURRENT_TIMESTAMP
-                    """,
-                    (symbol, name),
-                )
-                updated += 1
-            except Exception as e:
-                logger.debug(f"Error updating name for {symbol}: {e}")
-
-        logger.info(f"Updated {updated} stock names in cache")
-        return updated
+        try:
+            # Batch insert using executemany for efficiency
+            conn.executemany(
+                """
+                INSERT INTO stock_names (symbol, name)
+                VALUES (?, ?)
+                ON CONFLICT (symbol) DO UPDATE SET
+                    name = excluded.name,
+                    updated_at = NOW()
+                """,
+                list(names.items()),
+            )
+            logger.info(f"Updated {len(names)} stock names in cache")
+            return len(names)
+        except Exception as e:
+            logger.warning(f"Error updating stock names: {e}")
+            return 0
 
     def get_all_stock_names(self) -> dict[str, str]:
         """
