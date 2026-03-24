@@ -138,8 +138,8 @@ class SentimentStorage(DataProvider):
                 conn.execute(
                     """
                     INSERT INTO sentiment_raw
-                    (symbol, timestamp, source, score, confidence, raw_data)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (id, symbol, timestamp, source, score, confidence, raw_data)
+                    VALUES (nextval('sentiment_raw_id_seq'), ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         score.symbol,
@@ -184,8 +184,8 @@ class SentimentStorage(DataProvider):
             conn.execute(
                 """
                 INSERT INTO sentiment_composite
-                (symbol, timestamp, score, confidence, source_scores)
-                VALUES (?, ?, ?, ?, ?)
+                (id, symbol, timestamp, score, confidence, source_scores)
+                VALUES (nextval('sentiment_composite_id_seq'), ?, ?, ?, ?, ?)
                 ON CONFLICT (symbol, timestamp) DO UPDATE SET
                     score = excluded.score,
                     confidence = excluded.confidence,

@@ -31,6 +31,54 @@ from sentiment_strategy.valuation import SectorMetrics, ValuationCalculator
 logger = logging.getLogger(__name__)
 
 
+def fetch_all_stock_names_from_api():
+    """Fetch all stock names from AKShare API as DataFrame."""
+    try:
+        import akshare as ak
+
+        df = ak.stock_info_a_code_name()
+        # Rename columns to match database schema
+        df = df.rename(columns={"code": "symbol", "name": "name"})
+        # Filter out rows with empty values
+        df = df[df["symbol"].notna() & df["name"].notna()]
+        return df
+    except Exception as e:
+        logger.warning(f"Failed to fetch stock names from API: {e}")
+        return None
+
+
+def get_stock_names_with_cache(symbols: list[str], storage: SentimentStorage) -> dict[str, str]:
+    """
+    Get stock names using cache-first strategy.
+
+    Args:
+        symbols: List of stock symbols to look up
+        storage: SentimentStorage instance for cache access
+
+    Returns:
+        Dictionary mapping symbol to name
+    """
+    # Check cache first
+    cached_names = storage.get_stock_names(symbols)
+    print(f"Found {len(cached_names)} names in cache")
+
+    # Find symbols not in cache
+    missing_symbols = [s for s in symbols if s not in cached_names]
+
+    if missing_symbols:
+        print("Fetching all stock names from API...")
+        df = fetch_all_stock_names_from_api()
+
+        if df is not None:
+            # Cache ALL names for future use (DuckDB reads DataFrame directly)
+            count = storage.update_stock_names_from_df(df)
+            print(f"Updated cache with {count} total names")
+            # Get the names we need from cache
+            cached_names = storage.get_stock_names(symbols)
+
+    return cached_names
+
+
 @dataclass
 class VerdictResult:
     """Result of verdict analysis for a single stock."""
@@ -357,8 +405,8 @@ class VerdictCalculator:
         """
         symbols = [s[0] for s in stocks]
 
-        # Get stock names
-        names_dict = self.get_stock_names(symbols)
+        # Get stock names using cache-first strategy
+        names_dict = get_stock_names_with_cache(symbols, self.storage)
 
         # Fetch fundamentals
         fundamentals_dict = self.fetch_fundamentals(symbols)

@@ -25,7 +25,10 @@
       "Bash(uv run pyright:*)",
       "Bash(uv pip show:*)",
       "Bash(python3:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(uv run:*)",
+      "mcp__ide__executeCode"
     ]
   }
 }
