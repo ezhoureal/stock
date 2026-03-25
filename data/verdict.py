@@ -19,7 +19,6 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import akshare as ak
 import pandas as pd
@@ -185,29 +184,11 @@ class VerdictCalculator:
         ).fetchall()
         return [(row[0], row[1]) for row in result]
 
-    def fetch_spot_data(self) -> pd.DataFrame:
-        """Fetch A-share spot data with PE and PB ratios."""
-        try:
-            df = ak.stock_zh_a_spot_em()
-            logger.info(f"Fetched {len(df)} spot records")
-            return df
-        except Exception as e:
-            logger.error(f"Error fetching spot data: {e}")
-            return pd.DataFrame()
-
-    def fetch_dividend_data(self) -> pd.DataFrame:
-        """Fetch dividend yield data for all stocks."""
-        try:
-            df = ak.stock_history_dividend()
-            logger.info(f"Fetched {len(df)} dividend records")
-            return df
-        except Exception as e:
-            logger.error(f"Error fetching dividend data: {e}")
-            return pd.DataFrame()
-
     def get_stock_names(self, symbols: list[str]) -> dict[str, str]:
         """
         Get stock names from cache or fetch from AKShare.
+
+        Uses individual stock API to avoid bulk data fetching.
 
         Args:
             symbols: List of stock symbols
@@ -220,23 +201,31 @@ class VerdictCalculator:
 
         # Find symbols not in cache
         missing_symbols = [s for s in symbols if s not in cached_names]
-        if missing_symbols:
-            # Fetch from spot data
-            spot_df = self.fetch_spot_data()
-            if not spot_df.empty:
-                for symbol in missing_symbols:
-                    row = spot_df[spot_df["代码"] == symbol]
-                    if not row.empty:
-                        cached_names[symbol] = str(row.iloc[0]["名称"])
 
-                # Update cache
+        if missing_symbols:
+            # Fetch names using individual stock API
+            for symbol in missing_symbols:
+                try:
+                    df = ak.stock_individual_info_em(symbol=symbol)
+                    if not df.empty:
+                        name = df.loc[df["item"] == "股票简称", "value"].iloc[0]
+                        cached_names[symbol] = str(name)
+                        logger.debug(f"Fetched name for {symbol}: {name}")
+                except Exception as e:
+                    logger.warning(f"Failed to fetch name for {symbol}: {e}")
+
+            # Update cache with newly fetched names
+            if cached_names:
                 self.storage.update_stock_names(cached_names)
 
         return cached_names
 
     def fetch_fundamentals(self, symbols: list[str]) -> dict[str, Fundamentals]:
         """
-        Fetch fundamental data for given symbols.
+        Fetch fundamental data for given symbols using individual stock APIs.
+
+        Uses ak.stock_value_em() which fetches data for ONE stock at a time,
+        avoiding the throttling issues of bulk APIs like stock_zh_a_spot_em().
 
         Args:
             symbols: List of stock symbols
@@ -245,56 +234,47 @@ class VerdictCalculator:
             Dictionary mapping symbol to Fundamentals
         """
         fundamentals: dict[str, Fundamentals] = {}
-
-        # Fetch spot data for PE and PB
-        spot_df = self.fetch_spot_data()
-
-        # Fetch dividend data
-        div_df = self.fetch_dividend_data()
-
-        # Build lookup dictionaries
-        spot_dict: dict[str, dict[str, Any]] = {}
-        if not spot_df.empty:
-            for _, row in spot_df.iterrows():
-                symbol = str(row["代码"])
-                spot_dict[symbol] = {
-                    "pe_ratio": row.get("市盈率-动态"),
-                    "pb_ratio": row.get("市净率"),
-                    "name": row.get("名称", ""),
-                }
-
-        div_dict: dict[str, float] = {}
-        if not div_df.empty:
-            for _, row in div_df.iterrows():
-                symbol = str(row["代码"])
-                # 年均股息 is in percentage, convert to ratio
-                avg_div = row.get("年均股息", 0)
-                if avg_div is not None and pd.notna(avg_div):
-                    div_dict[symbol] = float(avg_div) / 100.0
-
-        # Build Fundamentals for each symbol
         timestamp = datetime.now()
+
         for symbol in symbols:
-            spot_data = spot_dict.get(symbol, {})
+            try:
+                # Fetch valuation data for this individual stock
+                df = ak.stock_value_em(symbol=symbol)
 
-            pe = spot_data.get("pe_ratio")
-            pb = spot_data.get("pb_ratio")
-            div_yield = div_dict.get(symbol)
+                if df.empty:
+                    logger.warning(f"No data returned for {symbol}")
+                    continue
 
-            # Convert to float or None
-            pe_ratio = float(pe) if pe is not None and pd.notna(pe) else None
-            pb_ratio = float(pb) if pb is not None and pd.notna(pb) else None
-            dividend_yield: float | None = div_yield if div_yield is not None else None
+                # Get the most recent data point
+                latest = df.iloc[-1]
 
-            fundamentals[symbol] = Fundamentals(
-                symbol=symbol,
-                timestamp=timestamp,
-                pe_ratio=pe_ratio,
-                pe_ttm=pe_ratio,
-                pb_ratio=pb_ratio,
-                dividend_yield=dividend_yield,
-                peg_ratio=None,  # Not readily available from AKShare
-            )
+                # Extract metrics (handle NaN values)
+                pe_ratio = float(latest["PE(TTM)"]) if pd.notna(latest["PE(TTM)"]) else None
+                pb_ratio = float(latest["市净率"]) if pd.notna(latest["市净率"]) else None
+                peg_ratio = float(latest["PEG值"]) if pd.notna(latest["PEG值"]) else None
+
+                # Note: stock_value_em() doesn't provide dividend yield
+                # Set to None for now - can add separate API call later if needed
+                dividend_yield: float | None = None
+
+                fundamentals[symbol] = Fundamentals(
+                    symbol=symbol,
+                    timestamp=timestamp,
+                    pe_ratio=pe_ratio,
+                    pe_ttm=pe_ratio,
+                    pb_ratio=pb_ratio,
+                    dividend_yield=dividend_yield,
+                    peg_ratio=peg_ratio,
+                )
+
+                logger.info(
+                    f"Fetched fundamentals for {symbol}: PE={pe_ratio}, PB={pb_ratio}, PEG={peg_ratio}"
+                )
+
+            except Exception as e:
+                logger.error(f"Error fetching fundamentals for {symbol}: {e}")
+                # Continue with other symbols even if one fails
+                continue
 
         return fundamentals
 
