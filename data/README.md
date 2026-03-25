@@ -93,9 +93,11 @@ uv run python data/verdict.py --bottom-n 10 --weight-sentiment 0.6
 ----------------------------------------------------------------------------------------------------
  Rank | Symbol   | Name       | Sentiment | V Score  | Combined | Verdict |       PE |     PB |   Div%
 ----------------------------------------------------------------------------------------------------
-    1 | 600519   | 贵州茅台    |     -2.15 |    0.250 |     72.5 | BUY     |    25.3 |   8.12 |   1.62
-    2 | 000858   | 五粮液      |     -1.89 |    0.180 |     68.3 | BUY     |    18.5 |   4.25 |   2.10
+    1 | 600519   | 贵州茅台    |     -2.15 |    0.250 |     72.5 | BUY     |    25.3 |   8.12 |    N/A
+    2 | 000858   | 五粮液      |     -1.89 |    0.180 |     68.3 | BUY     |    18.5 |   4.25 |    N/A
 ```
+
+**Note:** Dividend yield is currently not available (`N/A`) as the individual valuation API (`stock_value_em`) doesn't provide this metric.
 
 ### Python API
 
@@ -161,13 +163,13 @@ Stock name cache:
 
 | API | Description | Use Case |
 |-----|-------------|----------|
-| `stock_zh_a_spot_em` | All A-share real-time quotes | PE, PB, price data |
+| `stock_value_em` | Individual stock valuation metrics | PE, PB, PEG (verdict.py) |
+| `stock_individual_info_em` | Individual stock info | Stock name lookup |
 | `stock_hot_rank_em` | Top 100 popularity ranking | Social sentiment |
 | `stock_market_fund_flow` | Market-wide fund flow | Forum sentiment |
 | `stock_hsgt_hold_stock_em` | Northbound holdings | News sentiment |
 | `stock_lhb_stock_statistic_em` | Dragon-tiger statistics | News sentiment |
 | `stock_margin_detail_sse/szse` | Margin trading | Forum/Search sentiment |
-| `stock_history_dividend` | Dividend history | Dividend yield |
 
 ---
 
