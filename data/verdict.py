@@ -220,6 +220,34 @@ class VerdictCalculator:
 
         return cached_names
 
+    def fetch_dividend_yield(self, symbol: str) -> float | None:
+        """
+        Fetch dividend yield for a single stock using Eastmoney API.
+
+        Args:
+            symbol: Stock symbol
+
+        Returns:
+            Dividend yield as a float (0.025 = 2.5%), or None if not available
+        """
+        try:
+            df = ak.stock_fhps_detail_em(symbol=symbol)
+            if df.empty:
+                logger.debug(f"No dividend data for {symbol}")
+                return None
+
+            # Get the most recent dividend data
+            latest = df.iloc[0]
+            dividend_yield = latest.get("现金分红-股息率")
+
+            if pd.notna(dividend_yield):
+                # API already returns as decimal (0.025 = 2.5%), use directly
+                return float(dividend_yield)
+            return None
+        except Exception as e:
+            logger.debug(f"Failed to fetch dividend yield for {symbol}: {e}")
+            return None
+
     def fetch_fundamentals(self, symbols: list[str]) -> dict[str, Fundamentals]:
         """
         Fetch fundamental data for given symbols using individual stock APIs.
@@ -253,9 +281,8 @@ class VerdictCalculator:
                 pb_ratio = float(latest["市净率"]) if pd.notna(latest["市净率"]) else None
                 peg_ratio = float(latest["PEG值"]) if pd.notna(latest["PEG值"]) else None
 
-                # Note: stock_value_em() doesn't provide dividend yield
-                # Set to None for now - can add separate API call later if needed
-                dividend_yield: float | None = None
+                # Fetch dividend yield separately
+                dividend_yield = self.fetch_dividend_yield(symbol)
 
                 fundamentals[symbol] = Fundamentals(
                     symbol=symbol,
@@ -268,7 +295,7 @@ class VerdictCalculator:
                 )
 
                 logger.info(
-                    f"Fetched fundamentals for {symbol}: PE={pe_ratio}, PB={pb_ratio}, PEG={peg_ratio}"
+                    f"Fetched fundamentals for {symbol}: PE={pe_ratio}, PB={pb_ratio}, PEG={peg_ratio}, DivYield={dividend_yield}"
                 )
 
             except Exception as e:
