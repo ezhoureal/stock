@@ -76,7 +76,9 @@ For live trading with Futu, configure `broker/.env`:
 
 ### Code Quality (REQUIRED)
 
-Always run these before committing Python code:
+We always need to keep the docs in sync with the implementation. After you're done implementing, you should check the README.md in the corresponding modules to make sure the README.md is up to date.
+
+Also run these before committing Python code:
 
 ```bash
 # Fix linting issues and format
@@ -90,7 +92,6 @@ uv run pyright .
 uv run pytest
 ```
 
-**All code must pass both Ruff and Pyright with zero errors before committing.**
 
 ### Type Hints
 Use modern Python 3.13 type hints:
